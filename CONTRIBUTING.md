@@ -22,7 +22,7 @@ This guide covers:
 ai-health-assistant/
 ├── ml/                     # Machine learning pipeline
 ├── backend/                # Flask API backend
-├── frontend/               # HTML/Tailwind/JS user interface
+├── frontend/               # HTML/JS user interface
 ├── db/                     # Schema, migrations, seed data
 ├── data/                   # Raw + processed datasets
 ├── docs/                   # PRD, diagrams, architecture
@@ -91,8 +91,8 @@ Each folder is isolated so contributors can work without interfering with other 
 ### **1. Clone the Repository**
 
 ```bash
-git clone https://github.com/<your-org>/ai-health-assistant.git
-cd ai-health-assistant
+git clone https://github.com/Philip-Gbesan/AIPHDA_AI_Powered_Health_Diagnostic_Assistant.git
+cd aiphda-health-assistant
 ```
 
 ---
@@ -127,8 +127,8 @@ pip install -r requirements-ml.txt
 ### **5. Set Up the Database**
 
 ```bash
-sqlite3 db/dev.sqlite < db/schema.sql
-sqlite3 db/dev.sqlite < db/seed.sql
+python database/init_db.py
+
 ```
 
 ---
@@ -136,7 +136,7 @@ sqlite3 db/dev.sqlite < db/seed.sql
 ### **6. Train a Model (Optional if a model exists)**
 
 ```bash
-python ml/train.py --data data/processed/train.csv --out ml/model/rf_v1.joblib
+python ml/train.py --data data/processed/master_dataset.csv --out ml/model/rf_v1.joblib
 ```
 
 ---
@@ -144,21 +144,24 @@ python ml/train.py --data data/processed/train.csv --out ml/model/rf_v1.joblib
 ### **7. Start the Flask Backend**
 
 ```bash
-cd backend
-flask --app app.py run
+python -m backend.app
 ```
 
 ---
 
 ### **8. Launch the Frontend**
 
-Open:
+Run:
 
-```
-frontend/public/index.html
+```bash
+python -m http.server 5000
 ```
 
-(or use a simple live server)
+Then open:
+```
+http://localhost:5000/frontend/public/index.html
+```
+(Make sure NOT to use a simple live server as it'll keep on reloading the backend)
 
 ---
 
@@ -166,17 +169,15 @@ frontend/public/index.html
 
 Tests are located in the **tests/** directory.
 
-Run everything:
+Run all tests:
 
 ```bash
-pytest
-```
-
-Run specific tests:
-
-```bash
-pytest tests/test_api.py
-pytest tests/test_ml.py
+python -m tests.test_api
+python -m tests.test_ml
+python -m tests.test_db
+python -m tests.test_ml_api_integration
+python -m tests.test_frontend_integration
+python -m tests.test_scripts
 ```
 
 ---
@@ -197,9 +198,9 @@ pytest tests/test_ml.py
 
 * Use modern ES6+ syntax
 * Keep API logic in `frontend/static/app.js`
-* Avoid inline JS in HTML files
+* Avoid inline JS in HTML files at best use script tags for javascript in the same html file
 
-### **HTML / Tailwind**
+### **HTML / CSS**
 
 * Keep class usage clean and meaningful
 * Avoid embedding large scripts directly in HTML
@@ -261,15 +262,20 @@ Just ensure:
 
 Frontend only needs to call:
 
-* `POST /api/v1/predict`
-* `POST /api/v1/feedback`
-* `POST /api/v1/admin/upload`
+* `POST /api/predict`
+* `POST /api/feedback`
+* `GET /api/admin/logs` - admin endpoint
+* `GET /api/admin/download-model` - admin endpoint
+* `POST /api/admin/upload-dataset` - admin endpoint
+* `POST /api/admin/preprocess` - admin endpoint
+* `POST /api/admin/retrain` - admin endpoint
+* `POST /api/admin/revert-model` - admin endpoint
 
 Any framework (React, Vue, Svelte, plain HTML) can replace the default UI.
 
 ### **Replacing the Database**
 
-Update internal logic inside `db_service.py`.
+Update internal logic inside `init_db.py`.
 As long as function signatures remain unchanged, backend code will continue working.
 
 ---

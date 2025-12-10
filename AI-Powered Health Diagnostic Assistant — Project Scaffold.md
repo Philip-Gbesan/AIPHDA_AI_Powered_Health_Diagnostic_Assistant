@@ -6,8 +6,6 @@ This document is a developer-facing project scaffold and README for the AI-Power
 * A README explaining what the project does, how it works, and how to extend/replace components.
 * Starter file templates and pointers for each major module.
 
-> NOTE: Your original PRD file has been uploaded to the project folder path: `/mnt/data/AI-POWERED-HEALTH-DIAGNOSIS-ASSISTANT.pdf`. Use it as the authoritative requirements doc when developing features and tests.
-
 ---
 
 ## Project goals (short)
@@ -35,53 +33,101 @@ This document is a developer-facing project scaffold and README for the AI-Power
 ## Folder structure (recommended)
 
 ```
-ai-health-assistant/
-├── ml/
-│   ├── data_preprocessing.py          # text cleaning, tokenization, mapping to symptom IDs
-│   ├── feature_engineering.py         # build symptom vectors
-│   ├── train.py                       # train RandomForest, save model joblib
-│   ├── evaluate.py                    # evaluation metrics, top-3 accuracy
-│   ├── model/                         # model artifacts (joblib, metadata.json)
-│   └── requirements-ml.txt            # ML-specific dependencies
+AIPHDA_Health_Diagnostic_Assistant/
 ├── backend/
+│   ├── __init__.py
 │   ├── app.py                         # Flask app entrypoint
-│   ├── api/
+│   ├── routes/
+│   |   ├── __init__.py
 │   │   ├── predict.py                 # /predict and inference logic
-│   │   ├── audio.py                   # audio->text integration (Vosk wrapper)
+│   │   ├── feedback.py                # /feddback and general advice
 │   │   └── admin.py                   # /admin endpoints (upload CSV)
 │   ├── services/
-│   │   ├── model_service.py           # model loading & wrapper for inference
-│   │   └── db_service.py              # DB access functions
+│   |   ├── __init__.py
+│   │   └── ml_service.py           # model loading & wrapper for inference
 │   ├── config.py                      # config (paths, DB URI, API keys)
-│   ├── requirements.txt
-│   └── Dockerfile                     # optional local dev container
+│   └── app.py
+│
+├── database/
+│   ├── db.py                          # database connection
+│   ├── queries.py                     # database CRUD functions
+|   ├── schema.sql                     # SQL schema for SQLite or MySQL
+│   ├── seed.sql                       # seed data (basic diseases/symptoms)
+│   ├── init_db.py                     # initialize and create database
+│   └── dev.sqlite                     # optional dev DB
+│
+├── docs/
+│   ├── AIPHDA_Project_Documentation.pdf # copy of PRD (or link to uploaded pdf)
+│   ├── PRD.md                         # copy of PRD (or link to uploaded pdf)
+│   └── Project DFD Diagram.png        # diagram (optional)
+│
 ├── frontend/
 │   ├── public/
 │   │   ├── index.html                 # user symptom input + mic
-│   │   ├── results.html               # results + feedback UI
+│   │   ├── about.html                 # about page
+│   │   ├── contact.html               # contact page
+│   │   ├── admin.js                   # admin functionalities
 │   │   └── admin.html                 # admin dashboard (basic)
-│   ├── static/
-│   │   ├── app.js                     # frontend fetch requests
-│   │   └── styles.css                 # Tailwind compiled styles or link
 │   └── README_frontend.md
-├── db/
-│   ├── schema.sql                     # SQL schema for SQLite or MySQL
-│   ├── seed.sql                       # seed data (basic diseases/symptoms)
-│   └── dev.sqlite                     # optional dev DB
-├── data/
-│   ├── raw/                           # original datasets (CSV, JSON)
-│   └── processed/                     # cleaned datasets used to train
+│
+├── ml/
+├── ├── __init__.py
+├── ├── preprocess/
+│   ├── ├── __init__.py
+│   ├── │
+│   ├── ├── loaders/
+│   ├── │   ├── __init__.py
+│   ├── │   ├── base_loader.py
+│   ├── │   ├── loader_binary_matrix.py
+│   ├── │   ├── loader_symptom_list.py
+│   ├── │   ├── loader_textual_description.py
+│   ├── │   └── loader_auto.py
+│   ├── │
+│   ├── ├── cleaners/
+│   ├── │   ├── __init__.py
+│   ├── │   ├── normalize_text.py
+│   ├── │   ├── symptom_cleaner.py
+│   ├── │   ├── disease_cleaner.py
+│   ├── │   └── synonyms_map.json
+│   ├── │
+│   ├── ├── merger/
+│   ├── │   ├── __init__.py
+│   ├── │   ├── dataset_merger.py
+│   ├── │   ├── vector_builder.py
+│   ├── │   └── feature_indexer.py
+│   ├── │
+│   ├── └── pipeline.py    # <--- Master pipeline (combines all modules)
+├── ├── model/                         # model artifacts (joblib, metadata.json)
+│   ├── ├── saved_model/
+├── ├── data/
+│   ├── ├── raw/          # datasets from Kaggle, Mendeley and others
+│   ├── ├── processed/                     # master_dataset.csv + features.json
+│   ├── │   ├── master_dataset.csv         # cleaned datasets used to train── public/
+│   ├── │   └── features.json
+├── ├── train.py
+├── ├── evaluate.py
+├── ├── requirements_ml.txt
+├── ├── run_preprocess.py
+├── ├── run_train_eval.py
+├── ├── train.py
+├── ├── utils.py
+│
 ├── scripts/
-│   ├── retrain.sh                     # simple retrain script
-│   ├── export_model.sh                # package model artifacts
-│   └── sync_data.sh                   # admin upload helper
-├── docs/
-│   ├── PRD.md                         # copy of PRD (or link to uploaded pdf)
-│   └── architecture.png               # diagram (optional)
+│   ├── retrain.py                     # simple retrain script
+│   ├── export_model.py                # package model artifacts
+│   ├── preprocess_raw.py              # simple preprocess raw datasets script
+│   ├── revert_model.py                # revert to model previous version
+│   └── sync_data.py                   # admin upload helper
+│
 ├── tests/
+│   ├── __init__.py
 │   ├── test_ml.py
 │   ├── test_api.py
+│   ├── test_ml_api_integration.py
+│   ├── test_db.py
+│   ├── test_scripts.py
 │   └── test_frontend_integration.md
+│
 ├── .gitignore
 ├── README.md                          # high-level README (see below)
 └── CONTRIBUTING.md                    # how to contribute and code style
@@ -177,76 +223,3 @@ See CONTRIBUTING.md for coding style, branch strategy, and PR checks.
 
 
 
-
-
-
-
-
-ml/
-├── preprocess/
-│   ├── __init__.py
-│   │
-│   ├── loaders/
-│   │   ├── __init__.py
-│   │   ├── base_loader.py
-│   │   ├── loader_binary_matrix.py
-│   │   ├── loader_symptom_list.py
-│   │   ├── loader_textual_description.py
-│   │   └── loader_auto.py
-│   │
-│   ├── cleaners/
-│   │   ├── __init__.py
-│   │   ├── normalize_text.py
-│   │   ├── symptom_cleaner.py
-│   │   ├── disease_cleaner.py
-│   │   └── synonyms_map.json
-│   │
-│   ├── merger/
-│   │   ├── __init__.py
-│   │   ├── dataset_merger.py
-│   │   ├── vector_builder.py
-│   │   └── feature_indexer.py
-│   │
-│   └── pipeline.py    # <--- Master pipeline (combines all modules)
-│
-├── train.py
-├── evaluate.py
-├── utils.py
-│
-└── data/
-    ├── raw/          # datasets from Kaggle, Mendeley
-    ├── staged/       # cleaned not-yet-merged datasets
-    └── processed/    # master_dataset.csv + features.json
-
-
-
-database/
-│── dev.sqlite          <-- your development database
-│── schema.sql          <-- table creation SQL file
-│── seed.sql            <-- initial seed data (optional)
-│── migrate.sql         <-- future migration scripts (optional)
-│── init_db.py          <-- python script to bootstrap DB from schema.sql
-│── db.py               <-- connection helper
-│── queries.py          <-- reusable DB functions
-
-
-
-backend/
-│── __init__.py
-│── app.py
-│── config.py
-│── routes/
-│     ├── __init__.py
-│     ├── predict.py
-│     ├── feedback.py
-│     ├── admin.py
-│
-│── services/
-│     ├── __init__.py
-│     ├── ml_service.py
-│     ├── advice_service.py
-│
-│── utils/
-│     ├── __init__.py
-│     ├── loader.py
-│

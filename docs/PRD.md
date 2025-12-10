@@ -102,10 +102,8 @@ This is an educational, research-focused system and **not a medical diagnostic t
 ### 5.2 Backend (Flask)
 
 * `/predict` – Accepts text, returns predictions.
-* `/predict/audio` – Accepts audio, returns predictions.
 * `/feedback` – Stores user feedback.
 * `/admin/upload` – Dataset upload.
-* `/nearby_hospitals` – Location-based suggestions.
 
 ### 5.3 Machine Learning
 
@@ -129,8 +127,8 @@ This is an educational, research-focused system and **not a medical diagnostic t
 
 **Machine Learning**: Python, Scikit-learn, SpaCy, NLTK
 **Backend**: Flask, Python
-**Frontend**: HTML, TailwindCSS, JavaScript
-**Database**: SQLite/MySQL
+**Frontend**: HTML, Vanila CSS, JavaScript
+**Database**: SQLite
 **Voice-to-Text**: Vosk or External API
 
 ---
@@ -143,7 +141,7 @@ You can export this into any diagram tool later to produce `architecture.png`.
 ```
                  ┌───────────────────────────┐
                  │        FRONTEND UI        │
-                 │  - HTML/Tailwind          │
+                 │  - HTML/CSS               │
 User Input  ---> │  - JS (fetch API)         │ ---> Feedback
  Voice/Text       └─────────────┬─────────────┘
                                  │
