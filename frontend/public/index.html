@@ -1,0 +1,749 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AIPHDA — Home</title>
+
+  <!-- Theme color -->
+  <meta name="theme-color" content="#198ae6" />
+
+  <style>
+    /* ---------- COLOR PALETTE ---------- */
+    :root{
+      --brand-blue: #198ae6;
+      --brand-blue-700: #156fbe;
+      --bg: #ffffff;
+      --muted: #6b7280;
+      --card: linear-gradient(240deg,#9dc8ff, #daeaff);
+      --glass: rgba(255,255,255,0.85);
+      --shadow: 0 6px 18px rgba(1, 11, 19, 0.08);
+      --radius: 12px;
+    }
+
+    /* ---------- RESET ---------- */
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg, #f7fbff 0%, #ffffff 40%);
+      color:#0b1220;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      line-height:1.5;
+    }
+
+    a{color:var(--brand-blue); text-decoration: none}
+    img{max-width:100%; display:block}
+
+    /* ---------- LAYOUT ---------- */
+    .container{max-width: 1080px; margin:0 auto; padding:24px;}
+    header.site-header{
+      position: sticky;
+      top:18px;
+      z-index:50;
+      display:flex;
+      justify-content:center;
+      pointer-events:none; /* allow children to show only */
+      padding:0 12px;
+    }
+
+    .nav-wrap{
+      width:100%;
+      max-width:1200px;
+      pointer-events:auto;
+      background: linear-gradient(135deg, rgba(0, 140, 255, 0.06), rgba(255,255,255,0.95));
+      border-radius: 14px;
+      padding:12px 18px;
+      box-shadow: var(--shadow);
+      display:flex;
+      align-items:center;
+      gap:12px;
+      backdrop-filter: blur(8px);
+    }
+
+    .brand{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      margin-right:auto;
+    }
+
+    .logo {
+      width:44px;
+      height:44px;
+      border-radius:10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      color:white;
+      background: linear-gradient(180deg,var(--brand-blue),var(--brand-blue-700));
+      box-shadow: 0 4px 10px rgba(25,138,230,0.18);
+    }
+
+    .brand h1{font-size:16px; margin:0}
+    .brand p{margin:0; font-size:12px; color:var(--muted)}
+
+    nav.primary {
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+
+    nav a.menu {
+      padding:10px 14px;
+      border-radius:10px;
+      font-weight:600;
+      color:var(--brand-blue);
+      background:transparent;
+    }
+
+    nav a.menu.active{
+      background: linear-gradient(90deg, rgba(25,138,230,0.12), rgba(25,138,230,0.02));
+      color:var(--brand-blue);
+      box-shadow: 0 6px 14px rgba(25,138,230,0.06);
+    }
+
+    /* ---------- HERO / INPUT ---------- */
+    .hero{
+      display:flex;
+      flex-direction:column;
+      align-items: center;
+      gap:18px;
+      padding-top:34px;
+      padding-bottom:28px;
+    }
+
+    .intro{
+      display:flex;
+      flex-direction:column;      
+      align-items: center;
+      gap:25px;
+    }
+
+    .intro h2{
+      margin:0;
+      font-size: 45px;
+      letter-spacing:0.2px;
+      text-align: center;
+    }
+
+    .intro p.lead{
+      margin:0;
+      color:var(--muted);
+      margin-top: 50px;
+      max-width: 880px;
+    }
+
+    .symptom-box{
+      margin-top:10px;
+      display:flex;
+      gap:8px;
+      align-items: center;
+      background:var(--card);
+      padding:12px;
+      border-radius:12px;
+      box-shadow: 0 6px 18px rgba(6,30,75,0.03);
+      width:100%;
+      max-width:900px;
+      height: 100%;
+      min-height: 120px;
+    }
+
+    .symptom-input{
+      flex:1;
+      border: none;
+      outline: none;
+      font-size:16px;
+      padding:10px;
+      background: transparent;
+    }
+
+    .btn {
+      background: var(--brand-blue);
+      color: white;
+      border: none;
+      width: 70px;
+      height: 42px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:600;
+      display:inline-flex;
+      align-items:center;
+      justify-content: center;
+      gap:8px;
+      box-shadow: 0 6px 12px rgba(25,138,230,0.12);
+    }
+
+    .btn.secondary{
+      background:transparent;
+      color:var(--brand-blue);
+      border:1px solid rgba(25,138,230,0.12);
+    }
+
+    .mic-btn {
+      width:42px;
+      height:42px;
+      font-size: 22px;
+      border-radius:10px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      background: white;
+      color:var(--brand-blue);
+      border:1px solid rgba(25,138,230,0.06);
+      cursor:pointer;
+    }
+
+    .mic-btn.recording {
+      background: linear-gradient(180deg, #ff6b6b, #ff3b3b);
+      color:white;
+      box-shadow: 0 8px 20px rgba(255,59,59,0.12);
+    }
+
+    /* results card */
+    .results{
+      margin-top:60px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      max-width: 900px;
+      background:white;
+      border: 1px solid rgb(245, 234, 234);
+      border-radius:12px;
+      padding:16px;
+      box-shadow: 0 6px 24px rgba(6,30,75,0.04);
+    }
+
+    .result-empty{
+      display:flex;
+      font-size: 18px;
+      gap:12px;
+      align-items:center;
+      color:var(--muted);
+      padding:20px;
+      justify-content:center;
+    }
+
+    .result-list{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .result-item{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:10px;
+      border-radius:10px;
+      background: linear-gradient(90deg, rgba(25,138,230,0.03), rgba(255,255,255,0.02));
+      border:1px solid rgba(25,138,230,0.03);
+    }
+
+    .result-item .left{
+      display:flex;
+      gap:12px;
+      align-items:center;
+    }
+
+    .pill{
+      padding:6px 10px;
+      background:rgba(25,138,230,0.12);
+      color:var(--brand-blue);
+      border-radius:999px;
+      font-weight:700;
+    }
+
+    .feedback-row{
+      margin-top:12px;
+      display:flex;
+      gap:25px;
+      justify-content:flex-end;
+    }
+
+    .feedback-row .btn {
+      padding:8px 12px;
+      width: 95px;
+      letter-spacing: 0.5px;
+      height: 38px;
+      font-weight:700;
+    }
+
+    /* How it works */
+    .how {
+      margin-top:22px;
+      max-width:900px;
+      align-items: center;
+      background:transparent;
+      display:flex;
+      gap:18px;
+      flex-direction:column;
+    }
+
+    .steps{
+      display:flex;
+      margin-top: 10px;
+      align-items: center;
+      gap: 25px;
+      flex-wrap:wrap;
+    }
+
+    .step{
+      flex:1 1 220px;
+      background:white;
+      border-radius:10px;
+      padding:14px;
+      box-shadow: 0 6px 18px rgba(6,30,75,0.04);
+    }
+
+    .step h4{margin:0 0 6px 0}
+    .step p{margin:0; color:var(--muted); font-size:14px}
+
+    /* ---------- FOOTER ---------- */
+    footer.site-footer{
+      margin-top:48px;
+      background:linear-gradient(180deg,#9dc8ff, #daeaff);
+      padding:28px 12px;
+      border-top:1px solid rgba(6,30,75,0.03);
+    }
+
+    .footer-inner{
+      max-width:1200px;
+      margin:0 auto;
+      display:flex;
+      gap:18px;
+      flex-wrap:wrap;
+      align-items:flex-start;
+    }
+
+    .footer-col{
+      flex:1 1 220px;
+    }
+
+    .disclaimer{
+      width:100%;
+      margin-top:18px;
+      font-size:13px;
+      color:#374151;
+      opacity:0.9;
+      border-top:1px solid rgba(6,30,75,0.02);
+      padding-top:12px;
+    }
+
+    /* ---------- RESPONSIVE ---------- */
+    @media (max-width:860px){
+      .nav-wrap{padding:10px}
+      .intro h2{font-size:22px}
+      .container{padding:16px}
+    }
+
+    @media (max-width:560px){
+      .nav-wrap{flex-direction:column; gap:8px}
+      .brand h1{font-size:14px}
+      .symptom-box{flex-direction:column; align-items:stretch}
+      .feedback-row{justify-content:stretch; flex-direction:column}
+      .result-item{flex-direction:column; align-items:flex-start; gap:8px}
+      .steps{flex-direction:column}
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ======= HEADER / NAV ======= -->
+  <header class="site-header">
+    <div class="nav-wrap container" role="navigation" aria-label="Main Navigation">
+      <div class="brand" aria-hidden="false">
+        <div class="logo">A</div>
+        <div>
+          <h1>AIPHDA</h1>
+          <p>AI Health Diagnostic Assistant</p>
+        </div>
+      </div>
+
+      <nav class="primary" role="menubar" aria-label="Primary">
+        <a class="menu active" href="index.html">Home</a>
+        <a class="menu" href="about.html">About Us</a>
+        <a class="menu" href="contact.html">Contact Us</a>
+        <a class="menu" href="admin.html">Admin</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ======= MAIN CONTENT ======= -->
+  <main class="container">
+    <section class="hero">
+      <div class="intro">
+        <h2>Check symptoms quickly — get suggested conditions & advice</h2>
+        <p class="lead">Type or speak your symptoms and send it and our AI will suggest the top possible conditions and preventive measures. Make sure to reload the browser to input other symptoms. Disclaimer: Please note that this tool is informational and not a replacement for medical professionals.</p>
+      </div>
+
+      <!-- Symptom input -->
+      <div class="symptom-box" role="search" aria-label="Symptom input">
+        <input id="symptomInput" class="symptom-input" placeholder="Input your symptoms (e.g. fever, sore throat, headache)" aria-label="Input your symptoms" />
+        <button id="micBtn" class="mic-btn" type="button" title="Use microphone" aria-pressed="false" aria-label="Record audio">
+          🔬
+        </button>
+        <button id="sendBtn" type="button" class="btn" aria-label="Send symptoms">Send</button>
+      </div>
+
+
+      <!-- Results -->
+      <div id="results" class="results" role="region" aria-live="polite">
+        <div id="emptyState" class="result-empty">
+          <p>No results yet — enter symptoms and click send</p>
+        </div>
+
+        <div id="resultContent" style="display:none;">
+          <div class="result-list" id="resultList"></div>
+
+          <div class="feedback-row" id="feedbackRow">
+            <button class="btn secondary" id="feedbackAccurate" type="button">Accurate</button>
+            <button class="btn secondary" id="feedbackFair" type="button">Fair</button>
+            <button class="btn secondary" id="feedbackInaccurate" type="button">Inaccurate</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live counters + how it works -->
+      <div style="display:flex; gap:18px; flex-direction: column; margin-top:60px; align-items:center;">
+        <div style="min-width:280px; background:white; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(6,30,75,0.03); text-align: center;">
+          <div style="font-weight:700">Prediction activity</div>
+          <div style="color:var(--muted); margin-top:8px">Total predictions</div>
+          <div id="predCount" style="font-size:20px; margin-top:6px; font-weight:800">—</div>
+        </div>
+
+        <div class="how" aria-label="How it works">
+          <h3 style="margin:0 0 6px 0">How it works</h3>
+          <div class="steps">
+            <div class="step">
+              <h4>1. Enter symptoms</h4>
+              <p>Type or speak your symptoms into the input box, then press Send.</p>
+            </div>
+            <div class="step">
+              <h4>2. AI analysis</h4>
+              <p>Our system extracts keywords and matches them against medical datasets to predict likely conditions.</p>
+            </div>
+            <div class="step">
+              <h4>3. Results & advice</h4>
+              <p>Get the top 3 possible conditions plus preventive measures. Use feedback buttons to help improve accuracy.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ======= FOOTER ======= -->
+  <footer class="site-footer">
+    <div class="footer-inner container">
+      <div class="footer-col">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="logo" style="width:48px;height:48px;border-radius:10px">A</div>
+          <div>
+            <strong>AIPHDA</strong>
+            <div style="color:var(--muted);font-size:13px">AI Health Diagnostic Assistant</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-col">
+        <strong>Quick links</strong>
+        <ul style="list-style:none;padding:0;margin:8px 0 0 0;color:var(--muted)">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="about.html">About Us</a></li>
+          <li><a href="contact.html">Contact</a></li>
+          <li><a href="admin.html">Admin</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <strong>Contact</strong>
+        <div style="margin-top:8px;color:var(--muted)">
+          support@aiphda.local<br/>
+          +234 801 234 5678
+        </div>
+      </div>
+
+      <div class="footer-col" style="flex:2 1 260px">
+        <strong>About</strong>
+        <p style="margin:8px 0 0 0;color:var(--muted)">AIPHDA uses AI to help users understand symptoms quickly. It is not a replacement for medical
+        professionals.</p>
+      </div>
+
+      <div class="disclaimer">
+        <strong>Medical disclaimer:</strong> This system is informational only and not a substitute for professional medical advice. If you are experiencing an emergency or severe symptoms, please contact a medical professional or emergency services immediately.
+      </div>
+    </div>
+  </footer>
+
+  <!-- ======= SCRIPTS ======= -->
+  <script>
+    // ---------- ELEMENTS ----------
+    const symptomInput = document.getElementById('symptomInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const micBtn = document.getElementById('micBtn');
+    const emptyState = document.getElementById('emptyState');
+    const resultContent = document.getElementById('resultContent');
+    const resultList = document.getElementById('resultList');
+    const feedbackRow = document.getElementById('feedbackRow');
+    const predCount = document.getElementById('predCount');
+
+    const feedbackAccurate = document.getElementById('feedbackAccurate');
+    const feedbackFair = document.getElementById('feedbackFair');
+    const feedbackInaccurate = document.getElementById('feedbackInaccurate');
+
+    // ---------- HELPERS ----------
+    function showEmpty() {
+      emptyState.style.display = 'flex';
+      resultContent.style.display = 'none';
+    }
+
+    function showResults(predictions) {
+      lastPredictions = predictions;  // store latest predictions
+
+      // hide empty state, show results container
+      emptyState.style.display = 'none';
+      resultContent.style.display = 'flex';
+      resultContent.style.flexDirection = 'column'
+      resultContent.style.alignItems = 'center'
+
+      // show feedback buttons
+      feedbackRow.style.display = 'flex';
+
+      // clear previous results
+      resultList.innerHTML = "";
+
+      predictions.forEach((p, idx) => {
+          const item = document.createElement("div");
+          item.classList.add(
+              "result-item",
+              idx === 0 ? "topResult" : "otherResult"
+          );
+
+          item.innerHTML = `
+            <div class="left">
+                <div class="pill">${idx + 1}</div>
+                <div>
+                    <div style="font-weight: 700;">${p.condition}</div>
+                    <div style="font-size: .85rem; margin-top: 4px; color: #666;">
+                        ${p.confidence}% confidence
+                    </div>
+                </div>
+            </div>
+
+            <div class="right" style="display:flex; align-items:center; gap:10px;">
+                <button class="btn2">Learn More</button>
+                <img src="frontend/assets/icons/caret-right.svg" width="14" alt="">
+            </div>
+          `;
+
+
+          resultList.appendChild(item);
+      });
+    }
+
+    function setPredCount(n){
+      predCount.textContent = n;
+    }
+
+    // ---------- FETCH PRED COUNT (uses admin logs endpoint) ----------
+    async function fetchPredCount(){
+      try {
+        const res = await fetch('http://127.0.0.1:5000/api/admin/logs');
+        if(!res.ok) return;
+        const data = await res.json();
+        if(Array.isArray(data)){
+          setPredCount(data.length);
+        }
+      } catch(e){
+        // ignore
+      }
+    }
+
+    // ---------- PREDICT (new flow) ----------
+    async function recordAttempt(symptomsArray){
+    // create a server-side attempt so total checks increments immediately
+    try {
+        const res = await fetch('http://127.0.0.1:5000/api/admin/record-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symptoms: symptomsArray })
+        });
+        if(!res.ok) {
+        // return null and fall back to direct predict
+        return null;
+        }
+        const data = await res.json();
+        return data.check_id || null;
+    } catch (e) {
+        console.warn('recordAttempt error', e);
+        return null;
+    }
+    }
+
+    async function doPredict(symptomsArray){
+    try {
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Checking...';
+
+        // 1) create an attempt (increments total checks on server)
+        const checkId = await recordAttempt(symptomsArray);
+
+        // 2) call predict with optional check_id
+        const res = await fetch('http://127.0.0.1:5000/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symptoms: symptomsArray, check_id: checkId })
+        });
+
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+
+        if(!res.ok){
+        const err = await res.json().catch(()=>({message:'Request failed'}));
+        alert('Prediction failed: ' + (err.message || JSON.stringify(err)));
+        // refresh counts because attempt was recorded even if prediction failed
+        await fetchPredCount();
+        return;
+        }
+
+        const data = await res.json();
+        const preds = data.predictions || [];
+        console.log("RAW PREDICTIONS FROM BACKEND:", preds);
+
+        showResults(preds);
+
+        // 3) after successful rendering, update displayed count by fetching logs
+        await fetchPredCount();
+
+    } catch (e) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+        alert('Error: ' + e.message);
+    }
+    }
+
+
+    // ---------- FEEDBACK ----------
+    async function sendFeedback(kind) {
+      const symptoms = symptomInput.value.trim();
+      if (!symptoms) return alert("No symptoms to send feedback for");
+
+      // Get top predicted condition correctly
+      const firstItem = resultList.querySelector(".result-item .left div > div");
+      const topCond = firstItem ? firstItem.innerText : "";
+
+      try {
+        const res = await fetch("http://127.0.0.1:5000/api/feedback", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            symptoms: symptoms
+              .split(",")
+              .map((s) => s.trim())
+              .filter(Boolean),
+            predicted: topCond,
+            feedback: kind,
+          }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          return alert("Feedback failed: " + (err.error || "Server error"));
+        }
+
+        // ✔ Show success message for all feedback types
+        alert("Thanks for your feedback!");
+
+        // ✔ If accurate → refresh successful predictions count
+        if (kind === "accurate") {
+          await fetchPredCount(); // already updates the UI counter
+        }
+      } catch (e) {
+        alert("Feedback failed: " + e.message);
+      }
+    }
+
+
+    // ---------- Mic / Speech recognition ----------
+    let recognition = null;
+    let recording = false;
+
+    function initSpeech(){
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+      if(!SpeechRecognition) {
+        micBtn.style.display = 'none';
+        return;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        recording = true;
+        micBtn.classList.add('recording');
+        micBtn.setAttribute('aria-pressed','true');
+      };
+
+      recognition.onresult = (ev) => {
+        const text = ev.results[0][0].transcript;
+        symptomInput.value = text;
+      };
+
+      recognition.onend = () => {
+        recording = false;
+        micBtn.classList.remove('recording');
+        micBtn.setAttribute('aria-pressed','false');
+      };
+
+      recognition.onerror = (ev) => {
+        recording = false;
+        micBtn.classList.remove('recording');
+        micBtn.setAttribute('aria-pressed','false');
+        console.error('Speech error', ev);
+        alert('Speech recognition error or not supported in this browser.');
+      };
+    }
+
+    micBtn.addEventListener('click', () => {
+      if(!recognition) return;
+      if(recording){
+        recognition.stop();
+        return;
+      }
+      try { recognition.start(); } catch(e){ console.warn(e) }
+    });
+
+    // ---------- UI events ----------
+    sendBtn.addEventListener('click', (e) => {
+      e.preventDefault()
+      const text = symptomInput.value.trim();
+      if(!text) return alert('Please enter your symptoms.');
+
+      // parse by comma or space; produce array of trimmed tokens
+      const parts = text.split(',').map(s=>s.trim()).filter(Boolean);
+      doPredict(parts);
+    });
+
+    feedbackAccurate.addEventListener('click', ()=>sendFeedback('accurate'));
+    feedbackFair.addEventListener('click', ()=>sendFeedback('fair'));
+    feedbackInaccurate.addEventListener('click', ()=>sendFeedback('inaccurate'));
+
+    // ---------- INIT ----------
+    (function init(){
+      showEmpty();
+      fetchPredCount();
+      initSpeech();
+    })();
+
+  </script>
+</body>
+</html>

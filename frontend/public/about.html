@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AIPHDA — About Us</title>
+
+  <meta name="theme-color" content="#198ae6"/>
+
+  <style>
+    /* ===== Root Palette (Copied EXACTLY from Homepage) ===== */
+    :root {
+      --brand-blue: #198ae6;
+      --brand-blue-700: #156fbe;
+      --bg: #ffffff;
+      --muted: #6b7280;
+      --card: linear-gradient(240deg,#9dc8ff, #daeaff);
+      --glass: rgba(255,255,255,0.85);
+      --shadow: 0 6px 18px rgba(1, 11, 19, 0.08);
+      --radius: 12px;
+    }
+
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family: Inter,system-ui,Arial;
+      background: linear-gradient(180deg, #f7fbff 0%, #ffffff 40%);
+      color:#0b1220;
+      line-height:1.6;
+    }
+    a, a:visited, a:hover, a:active {
+      text-decoration: none !important;
+    }
+
+    .container{max-width: 1080px; margin:0 auto; padding:24px;}
+
+    /* ===== Header ( identical to homepage ) ===== */
+    header.site-header{
+      position: sticky;
+      top:18px;
+      z-index:50;
+      display:flex;
+      justify-content:center;
+      padding:0 12px;
+      pointer-events:none;
+    }
+    .nav-wrap{
+      width:100%;
+      max-width:1200px;
+      background: linear-gradient(135deg, rgba(0, 140, 255, 0.06), rgba(255,255,255,0.95));
+      padding:12px 18px;
+      border-radius:14px;
+      box-shadow:var(--shadow);
+      display:flex;
+      gap:12px;
+      align-items:center;
+      backdrop-filter: blur(8px);
+      pointer-events:auto;
+    }
+    .brand{display:flex;gap:12px;align-items:center;margin-right:auto}
+    .logo {
+      width:44px;height:44px;border-radius:10px;
+      display:flex;align-items:center;justify-content:center;
+      font-weight:700;color:white;
+      background: linear-gradient(180deg,var(--brand-blue),var(--brand-blue-700));
+      box-shadow:0 4px 10px rgba(25,138,230,0.18);
+    }
+    nav.primary{display:flex;gap:8px}
+    nav a.menu{
+      padding:10px 14px;
+      border-radius:10px;
+      font-weight:600;
+      color:var(--brand-blue);
+      text-decoration:none;
+    }
+    nav a.menu.active{
+      background: linear-gradient(90deg, rgba(25,138,230,0.12), rgba(25,138,230,0.02));
+      box-shadow:0 6px 14px rgba(25,138,230,0.06);
+    }
+
+    /* ===== About Page Styles ===== */
+    .section{
+      margin-top:40px;
+      background:white;
+      border-radius:12px;
+      padding:28px;
+      box-shadow:0 6px 18px rgba(6,30,75,0.04);
+    }
+
+    .section h2 {
+      margin-top:0;
+      font-size:26px;
+    }
+
+    .section p {
+      margin:12px 0;
+      color:var(--muted);
+    }
+
+    .credits-list {
+      margin-top:12px;
+      padding-left:20px;
+      color:var(--muted);
+    }
+
+    .dev-card {
+      margin-top:12px;
+      padding:14px;
+      border-radius:10px;
+      background:linear-gradient(90deg, rgba(25,138,230,0.03), rgba(255,255,255,0.02));
+      border:1px solid rgba(25,138,230,0.05);
+    }
+
+    /* ===== Footer (same as homepage) ===== */
+    footer.site-footer{
+      margin-top:48px;
+      background:linear-gradient(180deg,#9dc8ff, #daeaff);
+      padding:28px 12px;
+      border-top:1px solid rgba(6,30,75,0.03);
+    }
+    .footer-inner{
+      max-width:1200px;margin:0 auto;
+      display:flex;gap:18px;flex-wrap:wrap;
+    }
+    .footer-col{flex:1 1 220px}
+    .footer-col a {
+      color: var(--brand-blue) !important;
+    }
+
+    .disclaimer{
+      width:100%;margin-top:18px;
+      font-size:13px;color:#374151;opacity:0.9;
+      border-top:1px solid rgba(6,30,75,0.02);
+      padding-top:12px;
+    }
+
+    @media(max-width:560px){
+      .nav-wrap{flex-direction:column}
+      .section{padding:20px}
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<header class="site-header">
+  <div class="nav-wrap container">
+    <div class="brand">
+      <div class="logo">A</div>
+      <div>
+        <h1 style="font-size:16px;margin:0;">AIPHDA</h1>
+        <p style="margin:0;font-size:12px;color:var(--muted)">AI Health Diagnostic Assistant</p>
+      </div>
+    </div>
+
+    <nav class="primary">
+      <a href="index.html" class="menu">Home</a>
+      <a href="about.html" class="menu active">About Us</a>
+      <a href="contact.html" class="menu">Contact Us</a>
+      <a href="admin.html" class="menu">Admin</a>
+    </nav>
+  </div>
+</header>
+
+
+<!-- MAIN -->
+<main class="container">
+
+  <!-- SECTION 1 — System Description -->
+  <section class="section">
+    <h2>About AIPHDA</h2>
+    <p>
+      AIPHDA (AI-Powered Health Diagnostic Assistant) is a smart medical support tool designed to
+      help users understand their symptoms instantly. It provides AI-generated predictions of
+      possible medical conditions along with basic preventive advice.
+    </p>
+    <p>
+      This system was created to bridge the gap between symptom occurrence and
+      early medical awareness. While not a replacement for professional doctors, it helps users
+      take informed steps quickly.
+    </p>
+  </section>
+
+  <!-- SECTION 2 — User Guide -->
+  <section class="section">
+    <h2>User Guide — How AIPHDA Works</h2>
+    <p>
+      AIPHDA allows users to type or speak their symptoms, after which the AI system processes them
+      using NLP (Natural Language Processing). The symptoms are compared against a
+      trained medical dataset to generate the most likely conditions.
+    </p>
+
+    <p>
+      <strong>Your privacy is protected:</strong>  
+      • No user identity is stored  
+      • Symptoms are logged anonymously only to improve model accuracy  
+      • No personal data is saved  
+    </p>
+  </section>
+
+  <!-- SECTION 3 — Developer Guide -->
+  <section class="section">
+    <h2>Developer Guide</h2>
+
+    <p>
+      AIPHDA is built using a combination of NLP pipelines, RandomForest classification models,
+      audio-to-text processing, dataset management workflows, and feedback-driven retraining.
+    </p>
+
+    <p>The system features:</p>
+
+    <ul class="credits-list">
+      <li>Custom dataset merging and preprocessing</li>
+      <li>Keyword-based symptom extraction</li>
+      <li>RandomForest model training & evaluation</li>
+      <li>Admin dashboard for dataset uploads and retraining</li>
+      <li>Speech recognition support</li>
+      <li>REST API (Flask backend)</li>
+    </ul>
+
+    <p>
+      Developers can contribute by improving dataset coverage, optimizing ML models, enhancing UX,
+      or expanding analytics. See <a href="../../CONTRIBUTING.md">CONTRIBUTING.md</a> for details.
+    </p>
+  </section>
+
+  <!-- SECTION 4 — Credits -->
+  <section class="section">
+    <h2>Credits & Contributors</h2>
+
+    <div class="dev-card">
+      <strong>Development Team</strong>
+      <p class="muted">
+        Project designed and developed by the AIPHDA team as a final-year project initiative.
+      </p>
+    </div>
+
+    <div class="dev-card">
+      <strong>Dataset Sources</strong>
+      <ul class="credits-list">
+        <li>Kaggle — Disease & Symptoms datasets</li>
+        <li>Mendeley Data — Symptom-disease research sets</li>
+        <li>Public medical resources and academic publications</li>
+      </ul>
+    </div>
+  </section>
+
+</main>
+
+
+<!-- FOOTER -->
+<footer class="site-footer">
+  <div class="footer-inner container">
+
+    <div class="footer-col">
+      <div style="display:flex;gap:12px;align-items:center">
+        <div class="logo" style="width:48px;height:48px">A</div>
+        <div><strong>AIPHDA</strong><br>
+          <span style="color:var(--muted);font-size:13px">
+            AI Health Diagnostic Assistant
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-col">
+      <strong>Quick links</strong>
+      <ul style="list-style:none;padding:0;margin:8px 0 0 0;color:var(--muted)">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="about.html">About Us</a></li>
+        <li><a href="contact.html">Contact</a></li>
+        <li><a href="admin.html">Admin</a></li>
+      </ul>
+    </div>
+
+    <div class="footer-col">
+      <strong>Contact</strong>
+      <p style="color:var(--muted);margin-top:8px;">
+        support@aiphda.local<br>
+        +234 801 234 5678
+      </p>
+    </div>
+
+    <div class="footer-col" style="flex:2 1 260px">
+      <strong>About</strong>
+      <p style="color:var(--muted);margin-top:8px;">
+        AIPHDA uses AI to help users understand symptoms quickly. It is not a replacement for medical
+        professionals.
+      </p>
+    </div>
+
+    <div class="disclaimer">
+      <strong>Medical disclaimer:</strong>
+      This system is informational only and not a substitute for professional medical advice. 
+      If you are experiencing an emergency or severe symptoms, please contact a medical professional or emergency services immediately.
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>

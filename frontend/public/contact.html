@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AIPHDA — Contact Us</title>
+
+  <meta name="theme-color" content="#198ae6" />
+
+  <style>
+    :root{
+      --brand-blue: #198ae6;
+      --brand-blue-700: #156fbe;
+      --bg: #ffffff;
+      --muted: #6b7280;
+      --card: linear-gradient(240deg,#9dc8ff, #daeaff);
+      --glass: rgba(255,255,255,0.85);
+      --shadow: 0 6px 18px rgba(1, 11, 19, 0.08);
+      --radius: 12px;
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      font-family: Inter, ui-sans-serif, system-ui;
+      background: linear-gradient(180deg, #f7fbff 0%, #ffffff 40%);
+      color:#0b1220;
+      -webkit-font-smoothing:antialiased;
+    }
+
+    a, a:visited, a:hover, a:active { text-decoration: none !important; }
+
+    .container{
+      max-width:1080px;
+      margin:0 auto;
+      padding:24px;
+    }
+
+    /* ---------------- HEADER ---------------- */
+    header.site-header{
+      position: sticky;
+      top:18px;
+      z-index:50;
+      display:flex;
+      justify-content:center;
+      padding:0 12px;
+      pointer-events:none;
+    }
+
+    .nav-wrap{
+      width:100%;
+      max-width:1200px;
+      pointer-events:auto;
+      background: linear-gradient(135deg, rgba(0, 140, 255, 0.06), rgba(255,255,255,0.95));
+      border-radius:14px;
+      padding:12px 18px;
+      box-shadow:var(--shadow);
+      display:flex;
+      align-items:center;
+      gap:12px;
+      backdrop-filter:blur(8px);
+    }
+
+    .brand{ display:flex; gap:12px; align-items:center; margin-right:auto; }
+    .logo{
+      width:44px; height:44px;
+      border-radius:10px;
+      display:flex; align-items:center; justify-content:center;
+      font-weight:700; color:white;
+      background: linear-gradient(180deg,var(--brand-blue),var(--brand-blue-700));
+      box-shadow:0 4px 10px rgba(25,138,230,0.18);
+    }
+
+    .brand h1{ margin:0; font-size:16px; }
+    .brand p{ margin:0; font-size:12px; color:var(--muted); }
+
+    nav.primary{ display:flex; gap:8px; }
+    nav a.menu{
+      padding:10px 14px;
+      border-radius:10px;
+      font-weight:600;
+      color:var(--brand-blue);
+    }
+    nav a.menu.active{
+      background: rgba(25,138,230,0.08);
+      box-shadow:0 6px 14px rgba(25,138,230,0.06);
+    }
+
+    /* ---------------- MAP FULL WIDTH ---------------- */
+    .map-full{
+      width:100%;
+      height:380px;
+      border-radius:12px;
+      overflow:hidden;
+      box-shadow:var(--shadow);
+      border:1px solid rgba(6,30,75,0.04);
+      margin-top:40px;
+    }
+
+    /* ---- CONTACT CARD + FORM LAYOUT ---- */
+    .contact-section{
+    margin-top:60px;
+    display:flex;
+    gap:24px;
+    align-items:stretch;
+    }
+
+    /* LEFT COLUMN (STACKED CARDS) */
+    .contact-cards-wrap{
+    flex: 1 1 260px;
+    display:flex;
+    flex-direction:column;
+    justify-content: space-between;
+    }
+
+    /* INDIVIDUAL CARDS */
+    .contact-card{
+    background:white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    justify-content: space-between;
+    padding:18px;
+    border-radius:12px;
+    box-shadow:var(--shadow);
+    border:1px solid rgba(6,30,75,0.04);
+    min-height:140px;              /* ⬅ makes the card compact */
+    }
+
+    .contact-card h4{
+    margin:0 0 4px 0;
+    font-size:16px;
+    font-weight:700;
+    }
+
+    .contact-card p{
+    margin:0;
+    color:var(--muted);
+    font-size:14px;
+    }
+
+    /* CONTACT FORM */
+    .contact-form{
+    flex: 1.3 1 420px;
+    background:white;
+    padding:20px;
+    border-radius:12px;
+    box-shadow:var(--shadow);
+    border:1px solid rgba(6,30,75,0.04);
+    max-width:550px;
+    }
+
+    .contact-form h3{
+    margin-top:0;
+    }
+
+    /* Input styling */
+    .form-group{
+    margin-bottom:12px;
+    display:flex;
+    flex-direction:column;
+    }
+    .form-group label{
+    font-size:14px;
+    margin-bottom:4px;
+    color:#374151;
+    }
+    .form-group input,
+    .form-group textarea{
+    padding:10px;
+    border-radius:8px;
+    border:1px solid #d9e2ec;
+    font-size:15px;
+    outline:none;
+    }
+
+    textarea{
+    min-height:100px;
+    max-height:160px;    /* ⬅ Prevents unnecessary stretch */
+    resize:vertical;
+    }
+
+    .send-btn{
+    padding:12px;
+    width:100%;
+    border:none;
+    border-radius:10px;
+    background:var(--brand-blue);
+    color:white;
+    font-weight:700;
+    cursor:pointer;
+    box-shadow:0 6px 12px rgba(25,138,230,0.12);
+    }
+
+    /* Responsive */
+    @media(max-width:760px){
+    .contact-section{
+        flex-direction:column;
+    }
+    .contact-form{
+        max-width:100%;
+    }
+    }
+
+
+    /* ---------------- FOOTER ---------------- */
+    footer.site-footer{
+      margin-top:48px;
+      background:linear-gradient(180deg,#9dc8ff,#daeaff);
+      padding:28px 12px;
+    }
+
+    .footer-inner{
+      max-width:1200px;
+      margin:0 auto;
+      display:flex;
+      flex-wrap:wrap;
+      gap:18px;
+    }
+
+    .footer-col{ flex:1 1 220px; }
+    .footer-col a{ color:var(--brand-blue) !important; }
+
+    .disclaimer{
+      width:100%;
+      margin-top:18px;
+      font-size:13px;
+      border-top:1px solid rgba(6,30,75,0.02);
+      padding-top:12px;
+      color:#374151;
+    }
+
+    @media(max-width:760px){
+      .contact-section{ flex-direction:column; }
+    }
+  </style>
+</head>
+
+<body>
+
+<!-- HEADER -->
+<header class="site-header">
+  <div class="nav-wrap container">
+    <div class="brand">
+      <div class="logo">A</div>
+      <div>
+        <h1>AIPHDA</h1>
+        <p>AI Health Diagnostic Assistant</p>
+      </div>
+    </div>
+    <nav class="primary">
+      <a class="menu" href="index.html">Home</a>
+      <a class="menu" href="about.html">About Us</a>
+      <a class="menu active" href="contact.html">Contact Us</a>
+      <a class="menu" href="admin.html">Admin</a>
+    </nav>
+  </div>
+</header>
+
+<main class="container">
+  <h1>Contact Us</h1>
+  <p style="color:var(--muted); max-width:680px;">
+    Have questions, feedback, or need support? Reach out using the information below or send us a message directly.
+  </p>
+
+  <!-- FULL WIDTH MAP -->
+  <div class="contact-map">
+    <div style="text-decoration:none; overflow:hidden;max-width:100%;width:100%;height:100%;"><div id="embed-map-display" style="height:100%; width:100%;max-width:100%;"><iframe style="height:100%; min-height: 500px; width:100%;border:0;" frameborder="0" src="https://www.google.com/maps/embed/v1/place?q=Nigeria,+Lagos,+Sangotedo,+Thera+peace+Estate,+Aptech+computer+education+ajah+centre&key=AIzaSyBFw0Qbyq9zTFTd-tUY6dZWTgaQzuU17R8"></iframe></div><style>#embed-map-display img.text-marker{max-width:none!important;background:none!important;}img{max-width:none}</style></div>
+  </div>
+
+  <div class="contact-section">
+    <!-- LEFT COLUMN: STACKED CARDS -->
+    <div class="contact-cards-wrap">
+
+        <div class="contact-card">
+        <h4>Email Us</h4>
+        <p>support@aiphda.local, &nbsp; support@aiphda.global</p>
+        </div>
+
+        <div class="contact-card">
+        <h4>Call Us</h4>
+        <p>+234 801 234 5678, &nbsp; +234 801 234 5678</p>
+        </div>
+
+        <div class="contact-card">
+        <h4>Office Location</h4>
+        <p>Lagos, Nigeria</p>
+        </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN: CONTACT FORM -->
+    <div class="contact-form">
+        <h3>Send us a message</h3>
+
+        <div class="form-group">
+        <label>First Name</label>
+        <input id="firstName" />
+        </div>
+
+        <div class="form-group">
+        <label>Last Name</label>
+        <input id="lastName" />
+        </div>
+
+        <div class="form-group">
+        <label>Phone Number</label>
+        <input id="phone" />
+        </div>
+
+        <div class="form-group">
+        <label>Subject</label>
+        <input id="subject" />
+        </div>
+
+        <div class="form-group">
+        <label>Description</label>
+        <textarea id="desc"></textarea>
+        </div>
+
+        <button class="send-btn" onclick="sendMail()">Send Issue</button>
+    </div>
+
+  </div>
+
+
+
+</main>
+
+<!-- FOOTER -->
+<footer class="site-footer">
+  <div class="footer-inner container">
+    <div class="footer-col">
+      <div style="display:flex;gap:12px;align-items:center">
+        <div class="logo" style="width:48px;height:48px;">A</div>
+        <div><strong>AIPHDA</strong><br><span style="color:var(--muted);font-size:13px">AI Health Diagnostic Assistant</span></div>
+      </div>
+    </div>
+
+    <div class="footer-col">
+      <strong>Quick links</strong>
+      <ul style="list-style:none;padding:0;margin:8px 0;color:var(--muted)">
+        <li><a href="index.html">Home</a></li>
+        <li><a href="about.html">About Us</a></li>
+        <li><a href="contact.html">Contact</a></li>
+        <li><a href="admin.html">Admin</a></li>
+      </ul>
+    </div>
+
+    <div class="footer-col">
+      <strong>Contact</strong>
+      <p style="color:var(--muted)">support@aiphda.local<br>+234 801 234 5678</p>
+    </div>
+
+    <div class="footer-col" style="flex:2 1 260px">
+      <strong>About</strong>
+      <p style="margin-top:8px;color:var(--muted)">AIPHDA uses AI to help users understand symptoms quickly. It is not a replacement for medical professionals.</p>
+    </div>
+
+    <div class="disclaimer">
+      <strong>Medical disclaimer:</strong> This system is informational only and not a substitute for professional medical advice.
+      If you are experiencing an emergency or severe symptoms, please contact a medical professional or emergency services.
+    </div>
+
+  </div>
+</footer>
+
+<script>
+function sendMail(){
+  const f = document.getElementById("firstName").value.trim();
+  const l = document.getElementById("lastName").value.trim();
+  const ph = document.getElementById("phone").value.trim();
+  const sub = document.getElementById("subject").value.trim();
+  const desc = document.getElementById("desc").value.trim();
+
+  const body = `
+Name: ${f} ${l}
+Phone: ${ph}
+
+Message:
+${desc}
+  `;
+  const mailto = `mailto:support@aiphda.local?subject=${encodeURIComponent(sub)}&body=${encodeURIComponent(body)}`;
+  window.location.href = mailto;
+}
+</script>
+
+</body>
+</html>

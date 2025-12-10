@@ -1,0 +1,2721 @@
+## feedback.py
+
+from flask import Blueprint, request, jsonify
+from database.queries import save_feedback
+
+feedback_bp = Blueprint("feedback", __name__)
+
+@feedback_bp.route("/feedback", methods=["POST"])
+def feedback():
+    data = request.get_json()
+
+    required = ["symptoms", "predicted", "feedback"]
+    if not all(key in data for key in required):
+        return jsonify({"error": "Missing fields"}), 400
+
+    save_feedback(
+        symptoms=str(data["symptoms"]),
+        predicted=data["predicted"],
+        correct=data.get("correct_condition"),
+        feedback=data["feedback"]
+    )
+
+    return jsonify({"message": "Feedback saved"})
+
+
+
+
+## predict.py
+
+# backend/routes/predict.py
+from flask import Blueprint, request, jsonify
+import joblib
+from backend.services.ml_service import ml_service
+from backend.routes.admin import admin_stats
+from database.queries import log_prediction, update_prediction_result
+
+predict_bp = Blueprint("predict", __name__)
+
+# @predict_bp.route("/predict", methods=["POST"])
+# def predict():
+#     data = request.get_json()
+
+#     if not data or "symptoms" not in data:
+#         return jsonify({"error": "symptoms field required"}), 400
+
+#     symptoms = data["symptoms"]
+#     # optional check id to update an existing attempt
+#     check_id = data.get("check_id", None)
+
+#     try:
+#         predictions = ml_service.predict(symptoms)
+#     except Exception as e:
+#         # If the model errors, return 500 and leave the attempt as placeholder (it will count in total checks)
+#         return jsonify({"error": "model error", "detail": str(e)}), 500
+
+#     top_prediction = predictions[0]["condition"] if predictions else ""
+
+#     # If an attempt (check_id) exists, update that row; else, fallback to inserting a fresh log
+#     if check_id:
+#         update_prediction_result(check_id, predictions, top_prediction)
+#     else:
+#         # fallback for older clients that still call predict only
+#         log_prediction(symptoms=str(symptoms), predictions=str(predictions), top_pred=top_prediction)
+
+#     return jsonify({
+#         "input_symptoms": symptoms,
+#         "predictions": predictions
+#     })
+
+
+
+
+model = None
+features = None
+vector_builder = None
+
+def load_resources():
+    global model, features, vector_builder
+    if model is None:
+        print("Loading model and features...")
+        model_data = joblib.load("ml/model/rf_model.joblib")
+        model = model_data["model"]
+        le = model_data["label_encoder"]
+
+        from ml.preprocess.merger.feature_indexer import FeatureIndexer
+        from ml.preprocess.merger.vector_builder import VectorBuilder
+
+        features = FeatureIndexer.load("ml/data/processed/features.json")
+        vector_builder = VectorBuilder(features)
+
+    return model, features, vector_builder
+
+
+@predict_bp.route('/predict', methods=['POST'])
+def predict():
+    global admin_stats
+
+    data = request.json
+    symptoms = data.get("symptoms", [])
+
+    # increment total symptom check count
+    admin_stats["total_checks"] += 1  
+
+    try:
+        # Convert symptoms to model input
+        # (Modify depending on your project)
+        vector_input = preprocess(symptoms)
+
+        prediction = model.predict([vector_input])[0]
+
+        # increment successful prediction count
+        admin_stats["successful_checks"] += 1
+
+        return jsonify({
+            "success": True,
+            "prediction": prediction
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
+
+
+def preprocess(symptom_list):
+    # Example (update appropriately):
+    s = 0
+    vector = [1 if s in symptom_list else 0]
+    return vector
+
+
+
+
+## admin.py
+
+import os
+import sys
+from flask import send_file
+import zipfile
+import io
+import subprocess
+from flask import Blueprint, request, jsonify
+from database.queries import (
+    register_admin_dataset,
+    get_admin_datasets,
+    get_models,
+    get_prediction_logs,
+    get_symptom_trends,
+    create_prediction_attempt
+)
+
+admin_bp = Blueprint("admin", __name__)
+
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PROJECT_ROOT = os.path.dirname(BASE_DIR)  
+SCRIPTS_DIR = os.path.join(PROJECT_ROOT, "scripts")
+
+# ======================
+# UPLOAD DATASET
+# ======================
+@admin_bp.route("/upload-dataset", methods=["POST"])
+def upload_dataset():
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "file is required"}), 400
+
+    filename = "uploaded_" + file.filename
+    save_path = f"ml/data/raw/{filename}"
+    file.save(save_path)
+
+    register_admin_dataset(filename, "pending")
+
+    return jsonify({
+        "message": "Dataset uploaded",
+        "filename": filename
+    })
+
+
+# ======================
+# LIST DATASETS
+# ======================
+@admin_bp.route("/datasets", methods=["GET"])
+def list_datasets():
+    return jsonify(get_admin_datasets())
+
+
+# ======================
+# LIST MODELS
+# ======================
+@admin_bp.route("/models", methods=["GET"])
+def list_models():
+    return jsonify(get_models())
+
+def run_python_script(script_name):
+    script_path = os.path.join(SCRIPTS_DIR, script_name)
+
+    env = os.environ.copy()
+    env["FLASK_RUN_FROM_CLI"] = "false"  # Prevent Flask reload on script changes
+
+    result = subprocess.run(
+        [sys.executable, script_path],
+        cwd=BASE_DIR,
+        capture_output=True,
+        text=True,
+        env=env
+    )
+
+
+    return result
+
+
+# ======================
+# SAVE MODEL
+# ======================
+@admin_bp.route("/save-model", methods=["POST"])
+def save_model():
+    result = run_python_script("export_model.py")
+
+    if result.returncode != 0:
+        return jsonify({
+            "error": "Export script failed",
+            "details": result.stderr
+        }), 500
+
+    return jsonify({
+        "message": "Model saved successfully",
+        "output": result.stdout
+    })
+
+
+# ======================
+# RETRAIN MODEL
+# ======================
+@admin_bp.route("/retrain", methods=["POST"])
+def retrain():
+    result = run_python_script("retrain.py")
+
+    if result.returncode != 0:
+        return jsonify({
+            "error": "Retrain script failed",
+            "details": result.stderr
+        }), 500
+
+    return jsonify({
+        "message": "Retraining complete",
+        "output": result.stdout
+    })
+
+
+# ======================
+# SYNC RAW DATA
+# ======================
+@admin_bp.route("/sync-data", methods=["POST"])
+def sync_data():
+    result = run_python_script("sync_data.py")
+
+    if result.returncode != 0:
+        return jsonify({
+            "error": "Sync script failed",
+            "details": result.stderr
+        }), 500
+
+    return jsonify({
+        "message": "Datasets synced successfully",
+        "output": result.stdout
+    })
+
+
+@admin_bp.route("/preprocess", methods=["POST"])
+def preprocess():
+    result = run_python_script("preprocess_raw.py")
+
+    if result.returncode != 0:
+        return jsonify({"error": "Preprocess failed", "details": result.stderr}), 500
+
+    return jsonify({"message": "Preprocessing complete", "output": result.stdout})
+
+
+@admin_bp.route("/revert-model", methods=["POST"])
+def revert_model():
+    result = run_python_script("revert_model.py")
+
+    if result.returncode != 0:
+        return jsonify({
+            "error": "Revert failed",
+            "stdout": result.stdout,
+            "stderr": result.stderr
+        }), 500
+
+
+    return jsonify({"message": "Model reverted", "output": result.stdout})
+
+
+
+@admin_bp.route("/download-model", methods=["GET"])
+def download_model():
+    buffer = io.BytesIO()
+
+    with zipfile.ZipFile(buffer, 'w') as zipf:
+        zipf.write("ml/model/rf_model.joblib", arcname="rf_model.joblib")
+
+        meta = "ml/model/meta.json"
+        if os.path.exists(meta):
+            zipf.write(meta, arcname="meta.json")
+
+    buffer.seek(0)
+
+    return send_file(buffer,
+                     mimetype="application/zip",
+                     as_attachment=True,
+                     download_name="current_model_bundle.zip")
+
+
+# ======================
+# PREDICTION LOGS
+# ======================
+@admin_bp.route("/logs", methods=["GET"])
+def logs():
+    return jsonify(get_prediction_logs())
+
+
+# ======================
+# SYMPTOM TRENDS
+# ======================
+@admin_bp.route("/symptom-trends", methods=["GET"])
+def symptom_trends():
+    return jsonify(get_symptom_trends())
+
+
+# ======================
+# FRONTEND COUNTER (OPTIONAL)
+# ======================
+@admin_bp.route("/record-check", methods=["POST"])
+def record_check():
+    data = request.get_json() or {}
+    symptoms = data.get("symptoms", "")
+    check_id = create_prediction_attempt(symptoms)
+    return jsonify({"check_id": check_id}), 201
+
+
+# ======================
+# SIMPLE STATS ENDPOINT
+# ======================
+admin_stats = {"total_checks": 0, "successful_checks": 0}
+
+@admin_bp.route("/stats", methods=["GET"])
+def get_stats():
+    return jsonify(admin_stats)
+
+
+
+
+## ml_service.py
+
+import joblib
+import json
+from ml.preprocess.merger.vector_builder import VectorBuilder
+from database.db import get_connection
+
+MODEL_PATH = "ml/model/rf_model.joblib"
+FEATURES_PATH = "ml/data/processed/features.json"
+
+class MLService:
+    def __init__(self):
+        print("Loading model and features...")
+        model_obj = joblib.load(MODEL_PATH)
+
+        self.model = model_obj["model"]
+        self.label_encoder = model_obj["label_encoder"]
+
+        with open(FEATURES_PATH, "r") as f:
+            feature_index = json.load(f)
+        
+        self.features = feature_index  
+        self.vector_builder = VectorBuilder(feature_index)
+        print("ML service ready.")
+
+    def predict(self, symptoms_list):
+        """
+        symptoms_list: ["fever", "cough"]
+        """
+        vector = self.vector_builder.build_vector(symptoms_list).reshape(1, -1)
+        proba = self.model.predict_proba(vector)[0]
+
+        # top 3
+        top3_idx = proba.argsort()[::-1][:3]
+        conditions = self.label_encoder.inverse_transform(top3_idx)
+
+        return [
+            {
+                "condition": cond,
+                "probability": float(proba[i])
+            }
+            for i, cond in zip(top3_idx, conditions)
+        ]
+
+# Global Singleton
+ml_service = MLService()
+
+
+
+
+
+
+## app.py
+
+import os
+from flask import Flask
+from backend.routes.predict import predict_bp
+from backend.routes.feedback import feedback_bp
+from backend.routes.admin import admin_bp
+from flask_cors import CORS
+
+def create_app():
+    app = Flask(__name__)
+    os.environ["WERKZEUG_RUN_MAIN"] = "true"
+    CORS(app)
+
+    # Blueprints
+    app.register_blueprint(predict_bp, url_prefix="/api")
+    app.register_blueprint(feedback_bp, url_prefix="/api")
+    app.register_blueprint(admin_bp, url_prefix="/api/admin")
+
+    return app
+
+app = create_app()
+
+if __name__ == "__main__":
+    app.run(debug=True)
+
+# Run this file using git bash with this command """python -m backend.app"""
+# You've got to run it this way with this specific command above or it probably might not run 
+
+
+
+
+
+## db.py
+
+import os
+import sqlite3
+
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DB_PATH = os.path.join(PROJECT_ROOT, "database/dev.sqlite")
+
+def get_connection():
+    return sqlite3.connect(DB_PATH)
+
+
+
+
+## init_db.py
+
+import sqlite3
+from pathlib import Path
+
+DB_PATH = "database/dev.sqlite"
+SCHEMA_PATH = "database/schema.sql"
+# SEED_PATH = "database/seed.sql"
+
+def run_sql_file(cursor, filepath):
+    with open(filepath, "r", encoding="utf-8") as f:
+        cursor.executescript(f.read())
+
+def init_db(seed=False):
+    Path("database").mkdir(exist_ok=True)
+
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+
+    # Load schema
+    print("Applying database schema...")
+    run_sql_file(cursor, SCHEMA_PATH)
+
+    # # Optionally load seed data
+    # if seed and Path(SEED_PATH).exists():
+    #     print("Seeding database...")
+    #     run_sql_file(cursor, SEED_PATH)
+
+    conn.commit()
+    conn.close()
+    print("Database initialized successfully at", DB_PATH)
+
+
+if __name__ == "__main__":
+    init_db(seed=True)
+
+
+
+
+
+## queries.py
+
+from .db import get_connection
+import json
+
+# ====================================
+# MODEL METADATA
+# ====================================
+
+def save_model_metadata(version, path, acc, top3):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO models (version, path, accuracy, top3_accuracy)
+        VALUES (?, ?, ?, ?)
+    """, (version, path, acc, top3))
+    conn.commit()
+    conn.close()
+
+
+def get_models():
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT id, version, path, accuracy, top3_accuracy, created_at
+        FROM models ORDER BY id DESC
+    """)
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+# ====================================
+# MODEL MANAGEMENT
+# ====================================
+
+def register_model_version(version, path, accuracy=None, top3_accuracy=None):
+    """
+    Register a saved model in the database.
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO models (version, path, accuracy, top3_accuracy)
+        VALUES (?, ?, ?, ?)
+    """, (version, path, accuracy, top3_accuracy))
+    conn.commit()
+    conn.close()
+
+
+
+# ====================================
+# FEEDBACK
+# ====================================
+
+def save_feedback(symptoms, predicted, correct, feedback):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO user_feedback (user_symptoms, predicted_condition, correct_condition, feedback)
+        VALUES (?, ?, ?, ?)
+    """, (symptoms, predicted, correct, feedback))
+    conn.commit()
+    conn.close()
+
+
+def get_feedback(limit=100):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT user_symptoms, predicted_condition, correct_condition, feedback, created_at
+        FROM user_feedback
+        ORDER BY id DESC
+        LIMIT ?
+    """, (limit,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+# ====================================
+# PREDICTION LOGS
+# ====================================
+
+def log_prediction(symptoms, predictions, top_pred):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO prediction_logs (symptoms, predictions, top_prediction)
+        VALUES (?, ?, ?)
+    """, (symptoms, predictions, top_pred))
+    conn.commit()
+    conn.close()
+
+
+def get_prediction_logs(limit=50):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT symptoms, predictions, top_prediction, created_at
+        FROM prediction_logs
+        ORDER BY id DESC
+        LIMIT ?
+    """, (limit,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+# ====================================
+# ADMIN DATASETS
+# ====================================
+
+def register_admin_dataset(filename, status="pending"):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO admin_uploaded_datasets (filename, status)
+        VALUES (?, ?)
+    """, (filename, status))
+    conn.commit()
+    conn.close()
+
+
+def get_admin_datasets():
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT id, filename, status, uploaded_at
+        FROM admin_uploaded_datasets
+        ORDER BY id DESC
+    """)
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+# ====================================
+# SYMPTOM TRENDS (analytics)
+# ====================================
+
+def increment_symptom_counts(symptoms_list):
+    conn = get_connection()
+    c = conn.cursor()
+
+    for symptom in symptoms_list:
+        c.execute("""
+            UPDATE symptom_trends
+            SET count = count + 1
+            WHERE symptom = ?
+        """, (symptom,))
+
+    conn.commit()
+    conn.close()
+
+
+def get_symptom_trends(limit=20):
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        SELECT symptom, count
+        FROM symptom_trends
+        ORDER BY count DESC
+        LIMIT ?
+    """, (limit,))
+    rows = c.fetchall()
+    conn.close()
+    return rows
+
+
+
+def create_prediction_attempt(symptoms):
+    """
+    Insert a placeholder row into prediction_logs to represent an attempt.
+    Returns the inserted row id (check_id).
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO prediction_logs (symptoms, predictions, top_prediction)
+        VALUES (?, ?, ?)
+    """, (str(symptoms), '[]', ''))  # use empty predictions/top_prediction as placeholder
+    conn.commit()
+    inserted_id = c.lastrowid
+    conn.close()
+    return inserted_id
+
+def update_prediction_result(check_id, predictions, top_pred):
+    """
+    Update the prediction_logs row created earlier with actual predictions.
+    predictions: Python list/dict -> we will store as JSON string
+    """
+    conn = get_connection()
+    c = conn.cursor()
+    preds_json = json.dumps(predictions)
+    c.execute("""
+        UPDATE prediction_logs
+        SET predictions = ?, top_prediction = ?
+        WHERE id = ?
+    """, (preds_json, top_pred, check_id))
+    conn.commit()
+    conn.close()
+
+
+
+
+
+## schema.sql
+
+-- MODELS TABLE
+CREATE TABLE IF NOT EXISTS models (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    version TEXT NOT NULL,
+    path TEXT NOT NULL,
+    accuracy REAL,
+    top3_accuracy REAL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- FEATURES TABLE
+CREATE TABLE IF NOT EXISTS features (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symptom TEXT NOT NULL,
+    index_num INTEGER NOT NULL
+);
+
+-- USER FEEDBACK
+CREATE TABLE IF NOT EXISTS user_feedback (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_symptoms TEXT NOT NULL,
+    predicted_condition TEXT NOT NULL,
+    correct_condition TEXT,
+    feedback TEXT CHECK (feedback IN ('accurate', 'inaccurate', 'uncertain')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ADMIN UPLOADED DATASETS
+CREATE TABLE IF NOT EXISTS admin_uploaded_datasets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    filename TEXT NOT NULL,
+    status TEXT CHECK (status IN ('pending','processed','invalid')),
+    uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- PREDICTION LOGS
+CREATE TABLE IF NOT EXISTS prediction_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symptoms TEXT NOT NULL,
+    predictions TEXT NOT NULL,
+    top_prediction TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- SYMPTOM TRENDS
+CREATE TABLE IF NOT EXISTS symptom_trends (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symptom TEXT NOT NULL,
+    count INTEGER DEFAULT 0
+);
+
+
+
+
+
+
+## index.html
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AIPHDA — Home</title>
+
+  <!-- Theme color -->
+  <meta name="theme-color" content="#198ae6" />
+
+  <style>
+    /* ---------- COLOR PALETTE ---------- */
+    :root{
+      --brand-blue: #198ae6;
+      --brand-blue-700: #156fbe;
+      --bg: #ffffff;
+      --muted: #6b7280;
+      --card: linear-gradient(240deg,#9dc8ff, #daeaff);
+      --glass: rgba(255,255,255,0.85);
+      --shadow: 0 6px 18px rgba(1, 11, 19, 0.08);
+      --radius: 12px;
+    }
+
+    /* ---------- RESET ---------- */
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg, #f7fbff 0%, #ffffff 40%);
+      color:#0b1220;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      line-height:1.5;
+    }
+
+    a{color:var(--brand-blue); text-decoration: none}
+    img{max-width:100%; display:block}
+
+    /* ---------- LAYOUT ---------- */
+    .container{max-width: 1080px; margin:0 auto; padding:24px;}
+    header.site-header{
+      position: sticky;
+      top:18px;
+      z-index:50;
+      display:flex;
+      justify-content:center;
+      pointer-events:none; /* allow children to show only */
+      padding:0 12px;
+    }
+
+    .nav-wrap{
+      width:100%;
+      max-width:1200px;
+      pointer-events:auto;
+      background: linear-gradient(135deg, rgba(0, 140, 255, 0.06), rgba(255,255,255,0.95));
+      border-radius: 14px;
+      padding:12px 18px;
+      box-shadow: var(--shadow);
+      display:flex;
+      align-items:center;
+      gap:12px;
+      backdrop-filter: blur(8px);
+    }
+
+    .brand{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      margin-right:auto;
+    }
+
+    .logo {
+      width:44px;
+      height:44px;
+      border-radius:10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      color:white;
+      background: linear-gradient(180deg,var(--brand-blue),var(--brand-blue-700));
+      box-shadow: 0 4px 10px rgba(25,138,230,0.18);
+    }
+
+    .brand h1{font-size:16px; margin:0}
+    .brand p{margin:0; font-size:12px; color:var(--muted)}
+
+    nav.primary {
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+
+    nav a.menu {
+      padding:10px 14px;
+      border-radius:10px;
+      font-weight:600;
+      color:var(--brand-blue);
+      background:transparent;
+    }
+
+    nav a.menu.active{
+      background: linear-gradient(90deg, rgba(25,138,230,0.12), rgba(25,138,230,0.02));
+      color:var(--brand-blue);
+      box-shadow: 0 6px 14px rgba(25,138,230,0.06);
+    }
+
+    /* ---------- HERO / INPUT ---------- */
+    .hero{
+      display:flex;
+      flex-direction:column;
+      align-items: center;
+      gap:18px;
+      padding-top:34px;
+      padding-bottom:28px;
+    }
+
+    .intro{
+      display:flex;
+      flex-direction:column;      
+      align-items: center;
+      gap:25px;
+    }
+
+    .intro h2{
+      margin:0;
+      font-size: 45px;
+      letter-spacing:0.2px;
+      text-align: center;
+    }
+
+    .intro p.lead{
+      margin:0;
+      color:var(--muted);
+      margin-top: 50px;
+      max-width: 880px;
+    }
+
+    .symptom-box{
+      margin-top:10px;
+      display:flex;
+      gap:8px;
+      align-items: center;
+      background:var(--card);
+      padding:12px;
+      border-radius:12px;
+      box-shadow: 0 6px 18px rgba(6,30,75,0.03);
+      width:100%;
+      max-width:900px;
+      height: 100%;
+      min-height: 120px;
+    }
+
+    .symptom-input{
+      flex:1;
+      border: none;
+      outline: none;
+      font-size:16px;
+      padding:10px;
+      background: transparent;
+    }
+
+    .btn {
+      background: var(--brand-blue);
+      color: white;
+      border: none;
+      width: 70px;
+      height: 42px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:600;
+      display:inline-flex;
+      align-items:center;
+      justify-content: center;
+      gap:8px;
+      box-shadow: 0 6px 12px rgba(25,138,230,0.12);
+    }
+
+    .btn.secondary{
+      background:transparent;
+      color:var(--brand-blue);
+      border:1px solid rgba(25,138,230,0.12);
+    }
+
+    .mic-btn {
+      width:42px;
+      height:42px;
+      font-size: 22px;
+      border-radius:10px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      background: white;
+      color:var(--brand-blue);
+      border:1px solid rgba(25,138,230,0.06);
+      cursor:pointer;
+    }
+
+    .mic-btn.recording {
+      background: linear-gradient(180deg, #ff6b6b, #ff3b3b);
+      color:white;
+      box-shadow: 0 8px 20px rgba(255,59,59,0.12);
+    }
+
+    /* results card */
+    .results{
+      margin-top:60px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      max-width: 900px;
+      background:white;
+      border: 1px solid rgb(245, 234, 234);
+      border-radius:12px;
+      padding:16px;
+      box-shadow: 0 6px 24px rgba(6,30,75,0.04);
+    }
+
+    .result-empty{
+      display:flex;
+      font-size: 18px;
+      gap:12px;
+      align-items:center;
+      color:var(--muted);
+      padding:20px;
+      justify-content:center;
+    }
+
+    .result-list{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .result-item{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:10px;
+      border-radius:10px;
+      background: linear-gradient(90deg, rgba(25,138,230,0.03), rgba(255,255,255,0.02));
+      border:1px solid rgba(25,138,230,0.03);
+    }
+
+    .result-item .left{
+      display:flex;
+      gap:12px;
+      align-items:center;
+    }
+
+    .pill{
+      padding:6px 10px;
+      background:rgba(25,138,230,0.12);
+      color:var(--brand-blue);
+      border-radius:999px;
+      font-weight:700;
+    }
+
+    .feedback-row{
+      margin-top:12px;
+      display:flex;
+      gap:8px;
+      justify-content:flex-end;
+    }
+
+    .feedback-row .btn {
+      padding:8px 12px;
+      font-weight:700;
+    }
+
+    /* How it works */
+    .how {
+      margin-top:22px;
+      max-width:900px;
+      align-items: center;
+      background:transparent;
+      display:flex;
+      gap:18px;
+      flex-direction:column;
+    }
+
+    .steps{
+      display:flex;
+      margin-top: 10px;
+      align-items: center;
+      gap: 25px;
+      flex-wrap:wrap;
+    }
+
+    .step{
+      flex:1 1 220px;
+      background:white;
+      border-radius:10px;
+      padding:14px;
+      box-shadow: 0 6px 18px rgba(6,30,75,0.04);
+    }
+
+    .step h4{margin:0 0 6px 0}
+    .step p{margin:0; color:var(--muted); font-size:14px}
+
+    /* ---------- FOOTER ---------- */
+    footer.site-footer{
+      margin-top:48px;
+      background:linear-gradient(180deg,#9dc8ff, #daeaff);
+      padding:28px 12px;
+      border-top:1px solid rgba(6,30,75,0.03);
+    }
+
+    .footer-inner{
+      max-width:1200px;
+      margin:0 auto;
+      display:flex;
+      gap:18px;
+      flex-wrap:wrap;
+      align-items:flex-start;
+    }
+
+    .footer-col{
+      flex:1 1 220px;
+    }
+
+    .disclaimer{
+      width:100%;
+      margin-top:18px;
+      font-size:13px;
+      color:#374151;
+      opacity:0.9;
+      border-top:1px solid rgba(6,30,75,0.02);
+      padding-top:12px;
+    }
+
+    /* ---------- RESPONSIVE ---------- */
+    @media (max-width:860px){
+      .nav-wrap{padding:10px}
+      .intro h2{font-size:22px}
+      .container{padding:16px}
+    }
+
+    @media (max-width:560px){
+      .nav-wrap{flex-direction:column; gap:8px}
+      .brand h1{font-size:14px}
+      .symptom-box{flex-direction:column; align-items:stretch}
+      .feedback-row{justify-content:stretch; flex-direction:column}
+      .result-item{flex-direction:column; align-items:flex-start; gap:8px}
+      .steps{flex-direction:column}
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ======= HEADER / NAV ======= -->
+  <header class="site-header">
+    <div class="nav-wrap container" role="navigation" aria-label="Main Navigation">
+      <div class="brand" aria-hidden="false">
+        <div class="logo">A</div>
+        <div>
+          <h1>AIPHDA</h1>
+          <p>AI Health Diagnostic Assistant</p>
+        </div>
+      </div>
+
+      <nav class="primary" role="menubar" aria-label="Primary">
+        <a class="menu active" href="index.html">Home</a>
+        <a class="menu" href="about.html">About Us</a>
+        <a class="menu" href="contact.html">Contact Us</a>
+        <a class="menu" href="admin.html">Admin</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ======= MAIN CONTENT ======= -->
+  <main class="container">
+    <section class="hero">
+      <div class="intro">
+        <h2>Check symptoms quickly — get suggested conditions & advice</h2>
+        <p class="lead">Type or speak your symptoms and our AI will suggest the top possible conditions and preventive measures. This tool is informational and not a replacement for medical professionals.</p>
+      </div>
+
+      <!-- Symptom input -->
+      <div class="symptom-box" role="search" aria-label="Symptom input">
+        <input id="symptomInput" class="symptom-input" placeholder="Input your symptoms (e.g. fever, sore throat, headache)" aria-label="Input your symptoms" />
+        <button id="micBtn" class="mic-btn" title="Use microphone" aria-pressed="false" aria-label="Record audio">
+          🔬
+        </button>
+        <button id="sendBtn" type="button" class="btn" aria-label="Send symptoms">Send</button>
+      </div>
+
+
+      <!-- Results -->
+      <div id="results" class="results" role="region" aria-live="polite">
+        <div id="emptyState" class="result-empty">
+          <p>No results yet — enter symptoms and click send</p>
+        </div>
+
+        <div id="resultContent" style="display:none;">
+          <div class="result-list" id="resultList"></div>
+
+          <div class="feedback-row" id="feedbackRow">
+            <button class="btn secondary" id="feedbackAccurate" type="button">Accurate</button>
+            <button class="btn secondary" id="feedbackFair" type="button">Fair</button>
+            <button class="btn secondary" id="feedbackInaccurate" type="button">Inaccurate</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live counters + how it works -->
+      <div style="display:flex; gap:18px; flex-direction: column; margin-top:60px; align-items:center;">
+        <div style="min-width:280px; background:white; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(6,30,75,0.03); text-align: center;">
+          <div style="font-weight:700">Prediction activity</div>
+          <div style="color:var(--muted); margin-top:8px">Total predictions</div>
+          <div id="predCount" style="font-size:20px; margin-top:6px; font-weight:800">—</div>
+        </div>
+
+        <div class="how" aria-label="How it works">
+          <h3 style="margin:0 0 6px 0">How it works</h3>
+          <div class="steps">
+            <div class="step">
+              <h4>1. Enter symptoms</h4>
+              <p>Type or speak your symptoms into the input box, then press Send.</p>
+            </div>
+            <div class="step">
+              <h4>2. AI analysis</h4>
+              <p>Our system extracts keywords and matches them against medical datasets to predict likely conditions.</p>
+            </div>
+            <div class="step">
+              <h4>3. Results & advice</h4>
+              <p>Get the top 3 possible conditions plus preventive measures. Use feedback buttons to help improve accuracy.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ======= FOOTER ======= -->
+  <footer class="site-footer">
+    <div class="footer-inner container">
+      <div class="footer-col">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="logo" style="width:48px;height:48px;border-radius:10px">A</div>
+          <div>
+            <strong>AIPHDA</strong>
+            <div style="color:var(--muted);font-size:13px">AI Health Diagnostic Assistant</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-col">
+        <strong>Quick links</strong>
+        <ul style="list-style:none;padding:0;margin:8px 0 0 0;color:var(--muted)">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="about.html">About Us</a></li>
+          <li><a href="contact.html">Contact</a></li>
+          <li><a href="admin.html">Admin</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <strong>Contact</strong>
+        <div style="margin-top:8px;color:var(--muted)">
+          support@aiphda.local<br/>
+          +234 801 234 5678
+        </div>
+      </div>
+
+      <div class="footer-col" style="flex:2 1 260px">
+        <strong>About</strong>
+        <p style="margin:8px 0 0 0;color:var(--muted)">AIPHDA uses AI to help users understand symptoms quickly. It is not a replacement for medical
+        professionals.</p>
+      </div>
+
+      <div class="disclaimer">
+        <strong>Medical disclaimer:</strong> This system is informational only and not a substitute for professional medical advice. If you are experiencing an emergency or severe symptoms, please contact a medical professional or emergency services immediately.
+      </div>
+    </div>
+  </footer>
+
+  <!-- ======= SCRIPTS ======= -->
+  <script>
+    // ---------- ELEMENTS ----------
+    const symptomInput = document.getElementById('symptomInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const micBtn = document.getElementById('micBtn');
+    const emptyState = document.getElementById('emptyState');
+    const resultContent = document.getElementById('resultContent');
+    const resultList = document.getElementById('resultList');
+    const feedbackRow = document.getElementById('feedbackRow');
+    const predCount = document.getElementById('predCount');
+
+    const feedbackAccurate = document.getElementById('feedbackAccurate');
+    const feedbackFair = document.getElementById('feedbackFair');
+    const feedbackInaccurate = document.getElementById('feedbackInaccurate');
+
+    // ---------- HELPERS ----------
+    function showEmpty() {
+      emptyState.style.display = 'flex';
+      resultContent.style.display = 'none';
+    }
+
+    function showResults(predictions) {
+      lastPredictions = predictions;  // store latest predictions
+
+      // hide empty state, show results container
+      emptyState.style.display = 'none';
+      resultContent.style.display = 'flex';
+
+      // show feedback buttons
+      feedbackRow.style.display = 'flex';
+
+      // clear previous results
+      resultList.innerHTML = "";
+
+      predictions.forEach((p, idx) => {
+          const item = document.createElement("div");
+          item.classList.add(
+              "result-item",
+              idx === 0 ? "topResult" : "otherResult"
+          );
+
+          item.innerHTML = `
+            <div class="left">
+                <div class="pill">${idx + 1}</div>
+                <div>
+                    <div style="font-weight: 700;">${p.condition}</div>
+                    <div style="font-size: .85rem; margin-top: 4px; color: #666;">
+                        ${p.confidence}% confidence
+                    </div>
+                </div>
+            </div>
+
+            <div class="right" style="display:flex; align-items:center; gap:10px;">
+                <button class="btn2">Learn More</button>
+                <img src="frontend/assets/icons/caret-right.svg" width="14" alt="">
+            </div>
+          `;
+
+
+          resultList.appendChild(item);
+      });
+    }
+
+    function setPredCount(n){
+      predCount.textContent = n;
+    }
+
+    // ---------- FETCH PRED COUNT (uses admin logs endpoint) ----------
+    async function fetchPredCount(){
+      try {
+        const res = await fetch('http://127.0.0.1:5000/api/admin/logs');
+        if(!res.ok) return;
+        const data = await res.json();
+        if(Array.isArray(data)){
+          setPredCount(data.length);
+        }
+      } catch(e){
+        // ignore
+      }
+    }
+
+    // ---------- PREDICT (new flow) ----------
+    async function recordAttempt(symptomsArray){
+    // create a server-side attempt so total checks increments immediately
+    try {
+        const res = await fetch('http://127.0.0.1:5000/api/admin/record-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symptoms: symptomsArray })
+        });
+        if(!res.ok) {
+        // return null and fall back to direct predict
+        return null;
+        }
+        const data = await res.json();
+        return data.check_id || null;
+    } catch (e) {
+        console.warn('recordAttempt error', e);
+        return null;
+    }
+    }
+
+    async function doPredict(symptomsArray){
+    try {
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Checking...';
+
+        // 1) create an attempt (increments total checks on server)
+        const checkId = await recordAttempt(symptomsArray);
+
+        // 2) call predict with optional check_id
+        const res = await fetch('http://127.0.0.1:5000/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symptoms: symptomsArray, check_id: checkId })
+        });
+
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+
+        if(!res.ok){
+        const err = await res.json().catch(()=>({message:'Request failed'}));
+        alert('Prediction failed: ' + (err.message || JSON.stringify(err)));
+        // refresh counts because attempt was recorded even if prediction failed
+        await fetchPredCount();
+        return;
+        }
+
+        const data = await res.json();
+        const preds = data.predictions || [];
+        console.log("RAW PREDICTIONS FROM BACKEND:", preds);
+
+        showResults(preds);
+
+        // 3) after successful rendering, update displayed count by fetching logs
+        await fetchPredCount();
+
+    } catch (e) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+        alert('Error: ' + e.message);
+    }
+    }
+
+
+    // ---------- FEEDBACK ----------
+    async function sendFeedback(kind){
+      // kind: 'accurate' | 'fair' | 'inaccurate'
+      // send the last prediction & user input to feedback endpoint
+      const symptoms = symptomInput.value.trim();
+      if(!symptoms) return alert('No symptoms to send feedback for');
+
+      // pick top predicted condition from UI
+      const topCond = resultList.querySelector('.result-item .left div > div')?.innerText
+      try {
+        await fetch('http://127.0.0.1:5000/api/feedback', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            symptoms: symptoms.split(',').map(s=>s.trim()).filter(Boolean),
+            predicted: topCond || '',
+            feedback: kind
+          })
+        });
+        alert('Thanks for your feedback!');
+      } catch(e){
+        alert('Feedback failed: ' + e.message);
+      }
+    }
+
+    // ---------- Mic / Speech recognition ----------
+    let recognition = null;
+    let recording = false;
+
+    function initSpeech(){
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+      if(!SpeechRecognition) {
+        micBtn.style.display = 'none';
+        return;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        recording = true;
+        micBtn.classList.add('recording');
+        micBtn.setAttribute('aria-pressed','true');
+      };
+
+      recognition.onresult = (ev) => {
+        const text = ev.results[0][0].transcript;
+        symptomInput.value = text;
+      };
+
+      recognition.onend = () => {
+        recording = false;
+        micBtn.classList.remove('recording');
+        micBtn.setAttribute('aria-pressed','false');
+      };
+
+      recognition.onerror = (ev) => {
+        recording = false;
+        micBtn.classList.remove('recording');
+        micBtn.setAttribute('aria-pressed','false');
+        console.error('Speech error', ev);
+        alert('Speech recognition error or not supported in this browser.');
+      };
+    }
+
+    micBtn.addEventListener('click', () => {
+      if(!recognition) return;
+      if(recording){
+        recognition.stop();
+        return;
+      }
+      try { recognition.start(); } catch(e){ console.warn(e) }
+    });
+
+    // ---------- UI events ----------
+    sendBtn.addEventListener('click', (e) => {
+      e.preventDefault()
+      const text = symptomInput.value.trim();
+      if(!text) return alert('Please enter your symptoms.');
+
+      // parse by comma or space; produce array of trimmed tokens
+      const parts = text.split(',').map(s=>s.trim()).filter(Boolean);
+      doPredict(parts);
+    });
+
+    feedbackAccurate.addEventListener('click', ()=>sendFeedback('accurate'));
+    feedbackFair.addEventListener('click', ()=>sendFeedback('fair'));
+    feedbackInaccurate.addEventListener('click', ()=>sendFeedback('inaccurate'));
+
+    // ---------- INIT ----------
+    (function init(){
+      showEmpty();
+      fetchPredCount();
+      initSpeech();
+    })();
+
+  </script>
+</body>
+</html>
+
+
+
+
+
+## admin.html
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>AIPHDA — Home</title>
+
+  <!-- Theme color -->
+  <meta name="theme-color" content="#198ae6" />
+
+  <style>
+    /* ---------- COLOR PALETTE ---------- */
+    :root{
+      --brand-blue: #198ae6;
+      --brand-blue-700: #156fbe;
+      --bg: #ffffff;
+      --muted: #6b7280;
+      --card: linear-gradient(240deg,#9dc8ff, #daeaff);
+      --glass: rgba(255,255,255,0.85);
+      --shadow: 0 6px 18px rgba(1, 11, 19, 0.08);
+      --radius: 12px;
+    }
+
+    /* ---------- RESET ---------- */
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+      background: linear-gradient(180deg, #f7fbff 0%, #ffffff 40%);
+      color:#0b1220;
+      -webkit-font-smoothing:antialiased;
+      -moz-osx-font-smoothing:grayscale;
+      line-height:1.5;
+    }
+
+    a{color:var(--brand-blue); text-decoration: none}
+    img{max-width:100%; display:block}
+
+    /* ---------- LAYOUT ---------- */
+    .container{max-width: 1080px; margin:0 auto; padding:24px;}
+    header.site-header{
+      position: sticky;
+      top:18px;
+      z-index:50;
+      display:flex;
+      justify-content:center;
+      pointer-events:none; /* allow children to show only */
+      padding:0 12px;
+    }
+
+    .nav-wrap{
+      width:100%;
+      max-width:1200px;
+      pointer-events:auto;
+      background: linear-gradient(135deg, rgba(0, 140, 255, 0.06), rgba(255,255,255,0.95));
+      border-radius: 14px;
+      padding:12px 18px;
+      box-shadow: var(--shadow);
+      display:flex;
+      align-items:center;
+      gap:12px;
+      backdrop-filter: blur(8px);
+    }
+
+    .brand{
+      display:flex;
+      gap:12px;
+      align-items:center;
+      margin-right:auto;
+    }
+
+    .logo {
+      width:44px;
+      height:44px;
+      border-radius:10px;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-weight:700;
+      color:white;
+      background: linear-gradient(180deg,var(--brand-blue),var(--brand-blue-700));
+      box-shadow: 0 4px 10px rgba(25,138,230,0.18);
+    }
+
+    .brand h1{font-size:16px; margin:0}
+    .brand p{margin:0; font-size:12px; color:var(--muted)}
+
+    nav.primary {
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+
+    nav a.menu {
+      padding:10px 14px;
+      border-radius:10px;
+      font-weight:600;
+      color:var(--brand-blue);
+      background:transparent;
+    }
+
+    nav a.menu.active{
+      background: linear-gradient(90deg, rgba(25,138,230,0.12), rgba(25,138,230,0.02));
+      color:var(--brand-blue);
+      box-shadow: 0 6px 14px rgba(25,138,230,0.06);
+    }
+
+    /* ---------- HERO / INPUT ---------- */
+    .hero{
+      display:flex;
+      flex-direction:column;
+      align-items: center;
+      gap:18px;
+      padding-top:34px;
+      padding-bottom:28px;
+    }
+
+    .intro{
+      display:flex;
+      flex-direction:column;      
+      align-items: center;
+      gap:25px;
+    }
+
+    .intro h2{
+      margin:0;
+      font-size: 45px;
+      letter-spacing:0.2px;
+      text-align: center;
+    }
+
+    .intro p.lead{
+      margin:0;
+      color:var(--muted);
+      margin-top: 50px;
+      max-width: 880px;
+    }
+
+    .symptom-box{
+      margin-top:10px;
+      display:flex;
+      gap:8px;
+      align-items: center;
+      background:var(--card);
+      padding:12px;
+      border-radius:12px;
+      box-shadow: 0 6px 18px rgba(6,30,75,0.03);
+      width:100%;
+      max-width:900px;
+      height: 100%;
+      min-height: 120px;
+    }
+
+    .symptom-input{
+      flex:1;
+      border: none;
+      outline: none;
+      font-size:16px;
+      padding:10px;
+      background: transparent;
+    }
+
+    .btn {
+      background: var(--brand-blue);
+      color: white;
+      border: none;
+      width: 70px;
+      height: 42px;
+      border-radius:10px;
+      cursor:pointer;
+      font-weight:600;
+      display:inline-flex;
+      align-items:center;
+      justify-content: center;
+      gap:8px;
+      box-shadow: 0 6px 12px rgba(25,138,230,0.12);
+    }
+
+    .btn.secondary{
+      background:transparent;
+      color:var(--brand-blue);
+      border:1px solid rgba(25,138,230,0.12);
+    }
+
+    .mic-btn {
+      width:42px;
+      height:42px;
+      font-size: 22px;
+      border-radius:10px;
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      background: white;
+      color:var(--brand-blue);
+      border:1px solid rgba(25,138,230,0.06);
+      cursor:pointer;
+    }
+
+    .mic-btn.recording {
+      background: linear-gradient(180deg, #ff6b6b, #ff3b3b);
+      color:white;
+      box-shadow: 0 8px 20px rgba(255,59,59,0.12);
+    }
+
+    /* results card */
+    .results{
+      margin-top:60px;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      max-width: 900px;
+      background:white;
+      border: 1px solid rgb(245, 234, 234);
+      border-radius:12px;
+      padding:16px;
+      box-shadow: 0 6px 24px rgba(6,30,75,0.04);
+    }
+
+    .result-empty{
+      display:flex;
+      font-size: 18px;
+      gap:12px;
+      align-items:center;
+      color:var(--muted);
+      padding:20px;
+      justify-content:center;
+    }
+
+    .result-list{
+      display:flex;
+      flex-direction:column;
+      gap:8px;
+    }
+
+    .result-item{
+      display:flex;
+      justify-content:space-between;
+      align-items:center;
+      padding:10px;
+      border-radius:10px;
+      background: linear-gradient(90deg, rgba(25,138,230,0.03), rgba(255,255,255,0.02));
+      border:1px solid rgba(25,138,230,0.03);
+    }
+
+    .result-item .left{
+      display:flex;
+      gap:12px;
+      align-items:center;
+    }
+
+    .pill{
+      padding:6px 10px;
+      background:rgba(25,138,230,0.12);
+      color:var(--brand-blue);
+      border-radius:999px;
+      font-weight:700;
+    }
+
+    .feedback-row{
+      margin-top:12px;
+      display:flex;
+      gap:8px;
+      justify-content:flex-end;
+    }
+
+    .feedback-row .btn {
+      padding:8px 12px;
+      font-weight:700;
+    }
+
+    /* How it works */
+    .how {
+      margin-top:22px;
+      max-width:900px;
+      align-items: center;
+      background:transparent;
+      display:flex;
+      gap:18px;
+      flex-direction:column;
+    }
+
+    .steps{
+      display:flex;
+      margin-top: 10px;
+      align-items: center;
+      gap: 25px;
+      flex-wrap:wrap;
+    }
+
+    .step{
+      flex:1 1 220px;
+      background:white;
+      border-radius:10px;
+      padding:14px;
+      box-shadow: 0 6px 18px rgba(6,30,75,0.04);
+    }
+
+    .step h4{margin:0 0 6px 0}
+    .step p{margin:0; color:var(--muted); font-size:14px}
+
+    /* ---------- FOOTER ---------- */
+    footer.site-footer{
+      margin-top:48px;
+      background:linear-gradient(180deg,#9dc8ff, #daeaff);
+      padding:28px 12px;
+      border-top:1px solid rgba(6,30,75,0.03);
+    }
+
+    .footer-inner{
+      max-width:1200px;
+      margin:0 auto;
+      display:flex;
+      gap:18px;
+      flex-wrap:wrap;
+      align-items:flex-start;
+    }
+
+    .footer-col{
+      flex:1 1 220px;
+    }
+
+    .disclaimer{
+      width:100%;
+      margin-top:18px;
+      font-size:13px;
+      color:#374151;
+      opacity:0.9;
+      border-top:1px solid rgba(6,30,75,0.02);
+      padding-top:12px;
+    }
+
+    /* ---------- RESPONSIVE ---------- */
+    @media (max-width:860px){
+      .nav-wrap{padding:10px}
+      .intro h2{font-size:22px}
+      .container{padding:16px}
+    }
+
+    @media (max-width:560px){
+      .nav-wrap{flex-direction:column; gap:8px}
+      .brand h1{font-size:14px}
+      .symptom-box{flex-direction:column; align-items:stretch}
+      .feedback-row{justify-content:stretch; flex-direction:column}
+      .result-item{flex-direction:column; align-items:flex-start; gap:8px}
+      .steps{flex-direction:column}
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ======= HEADER / NAV ======= -->
+  <header class="site-header">
+    <div class="nav-wrap container" role="navigation" aria-label="Main Navigation">
+      <div class="brand" aria-hidden="false">
+        <div class="logo">A</div>
+        <div>
+          <h1>AIPHDA</h1>
+          <p>AI Health Diagnostic Assistant</p>
+        </div>
+      </div>
+
+      <nav class="primary" role="menubar" aria-label="Primary">
+        <a class="menu active" href="index.html">Home</a>
+        <a class="menu" href="about.html">About Us</a>
+        <a class="menu" href="contact.html">Contact Us</a>
+        <a class="menu" href="admin.html">Admin</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- ======= MAIN CONTENT ======= -->
+  <main class="container">
+    <section class="hero">
+      <div class="intro">
+        <h2>Check symptoms quickly — get suggested conditions & advice</h2>
+        <p class="lead">Type or speak your symptoms and our AI will suggest the top possible conditions and preventive measures. This tool is informational and not a replacement for medical professionals.</p>
+      </div>
+
+      <!-- Symptom input -->
+      <div class="symptom-box" role="search" aria-label="Symptom input">
+        <input id="symptomInput" class="symptom-input" placeholder="Input your symptoms (e.g. fever, sore throat, headache)" aria-label="Input your symptoms" />
+        <button id="micBtn" class="mic-btn" title="Use microphone" aria-pressed="false" aria-label="Record audio">
+          🔬
+        </button>
+        <button id="sendBtn" type="button" class="btn" aria-label="Send symptoms">Send</button>
+      </div>
+
+
+      <!-- Results -->
+      <div id="results" class="results" role="region" aria-live="polite">
+        <div id="emptyState" class="result-empty">
+          <p>No results yet — enter symptoms and click send</p>
+        </div>
+
+        <div id="resultContent" style="display:none;">
+          <div class="result-list" id="resultList"></div>
+
+          <div class="feedback-row" id="feedbackRow">
+            <button class="btn secondary" id="feedbackAccurate" type="button">Accurate</button>
+            <button class="btn secondary" id="feedbackFair" type="button">Fair</button>
+            <button class="btn secondary" id="feedbackInaccurate" type="button">Inaccurate</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live counters + how it works -->
+      <div style="display:flex; gap:18px; flex-direction: column; margin-top:60px; align-items:center;">
+        <div style="min-width:280px; background:white; padding:12px; border-radius:10px; box-shadow:0 6px 18px rgba(6,30,75,0.03); text-align: center;">
+          <div style="font-weight:700">Prediction activity</div>
+          <div style="color:var(--muted); margin-top:8px">Total predictions</div>
+          <div id="predCount" style="font-size:20px; margin-top:6px; font-weight:800">—</div>
+        </div>
+
+        <div class="how" aria-label="How it works">
+          <h3 style="margin:0 0 6px 0">How it works</h3>
+          <div class="steps">
+            <div class="step">
+              <h4>1. Enter symptoms</h4>
+              <p>Type or speak your symptoms into the input box, then press Send.</p>
+            </div>
+            <div class="step">
+              <h4>2. AI analysis</h4>
+              <p>Our system extracts keywords and matches them against medical datasets to predict likely conditions.</p>
+            </div>
+            <div class="step">
+              <h4>3. Results & advice</h4>
+              <p>Get the top 3 possible conditions plus preventive measures. Use feedback buttons to help improve accuracy.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- ======= FOOTER ======= -->
+  <footer class="site-footer">
+    <div class="footer-inner container">
+      <div class="footer-col">
+        <div style="display:flex;gap:12px;align-items:center">
+          <div class="logo" style="width:48px;height:48px;border-radius:10px">A</div>
+          <div>
+            <strong>AIPHDA</strong>
+            <div style="color:var(--muted);font-size:13px">AI Health Diagnostic Assistant</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-col">
+        <strong>Quick links</strong>
+        <ul style="list-style:none;padding:0;margin:8px 0 0 0;color:var(--muted)">
+          <li><a href="index.html">Home</a></li>
+          <li><a href="about.html">About Us</a></li>
+          <li><a href="contact.html">Contact</a></li>
+          <li><a href="admin.html">Admin</a></li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <strong>Contact</strong>
+        <div style="margin-top:8px;color:var(--muted)">
+          support@aiphda.local<br/>
+          +234 801 234 5678
+        </div>
+      </div>
+
+      <div class="footer-col" style="flex:2 1 260px">
+        <strong>About</strong>
+        <p style="margin:8px 0 0 0;color:var(--muted)">AIPHDA uses AI to help users understand symptoms quickly. It is not a replacement for medical
+        professionals.</p>
+      </div>
+
+      <div class="disclaimer">
+        <strong>Medical disclaimer:</strong> This system is informational only and not a substitute for professional medical advice. If you are experiencing an emergency or severe symptoms, please contact a medical professional or emergency services immediately.
+      </div>
+    </div>
+  </footer>
+
+  <!-- ======= SCRIPTS ======= -->
+  <script>
+    // ---------- ELEMENTS ----------
+    const symptomInput = document.getElementById('symptomInput');
+    const sendBtn = document.getElementById('sendBtn');
+    const micBtn = document.getElementById('micBtn');
+    const emptyState = document.getElementById('emptyState');
+    const resultContent = document.getElementById('resultContent');
+    const resultList = document.getElementById('resultList');
+    const feedbackRow = document.getElementById('feedbackRow');
+    const predCount = document.getElementById('predCount');
+
+    const feedbackAccurate = document.getElementById('feedbackAccurate');
+    const feedbackFair = document.getElementById('feedbackFair');
+    const feedbackInaccurate = document.getElementById('feedbackInaccurate');
+
+    // ---------- HELPERS ----------
+    function showEmpty() {
+      emptyState.style.display = 'flex';
+      resultContent.style.display = 'none';
+    }
+
+    function showResults(predictions) {
+      lastPredictions = predictions;  // store latest predictions
+
+      // hide empty state, show results container
+      emptyState.style.display = 'none';
+      resultContent.style.display = 'flex';
+
+      // show feedback buttons
+      feedbackRow.style.display = 'flex';
+
+      // clear previous results
+      resultList.innerHTML = "";
+
+      predictions.forEach((p, idx) => {
+          const item = document.createElement("div");
+          item.classList.add(
+              "result-item",
+              idx === 0 ? "topResult" : "otherResult"
+          );
+
+          item.innerHTML = `
+            <div class="left">
+                <div class="pill">${idx + 1}</div>
+                <div>
+                    <div style="font-weight: 700;">${p.condition}</div>
+                    <div style="font-size: .85rem; margin-top: 4px; color: #666;">
+                        ${p.confidence}% confidence
+                    </div>
+                </div>
+            </div>
+
+            <div class="right" style="display:flex; align-items:center; gap:10px;">
+                <button class="btn2">Learn More</button>
+                <img src="frontend/assets/icons/caret-right.svg" width="14" alt="">
+            </div>
+          `;
+
+
+          resultList.appendChild(item);
+      });
+    }
+
+    function setPredCount(n){
+      predCount.textContent = n;
+    }
+
+    // ---------- FETCH PRED COUNT (uses admin logs endpoint) ----------
+    async function fetchPredCount(){
+      try {
+        const res = await fetch('http://127.0.0.1:5000/api/admin/logs');
+        if(!res.ok) return;
+        const data = await res.json();
+        if(Array.isArray(data)){
+          setPredCount(data.length);
+        }
+      } catch(e){
+        // ignore
+      }
+    }
+
+    // ---------- PREDICT (new flow) ----------
+    async function recordAttempt(symptomsArray){
+    // create a server-side attempt so total checks increments immediately
+    try {
+        const res = await fetch('http://127.0.0.1:5000/api/admin/record-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symptoms: symptomsArray })
+        });
+        if(!res.ok) {
+        // return null and fall back to direct predict
+        return null;
+        }
+        const data = await res.json();
+        return data.check_id || null;
+    } catch (e) {
+        console.warn('recordAttempt error', e);
+        return null;
+    }
+    }
+
+    async function doPredict(symptomsArray){
+    try {
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Checking...';
+
+        // 1) create an attempt (increments total checks on server)
+        const checkId = await recordAttempt(symptomsArray);
+
+        // 2) call predict with optional check_id
+        const res = await fetch('http://127.0.0.1:5000/api/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symptoms: symptomsArray, check_id: checkId })
+        });
+
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+
+        if(!res.ok){
+        const err = await res.json().catch(()=>({message:'Request failed'}));
+        alert('Prediction failed: ' + (err.message || JSON.stringify(err)));
+        // refresh counts because attempt was recorded even if prediction failed
+        await fetchPredCount();
+        return;
+        }
+
+        const data = await res.json();
+        const preds = data.predictions || [];
+        console.log("RAW PREDICTIONS FROM BACKEND:", preds);
+
+        showResults(preds);
+
+        // 3) after successful rendering, update displayed count by fetching logs
+        await fetchPredCount();
+
+    } catch (e) {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send';
+        alert('Error: ' + e.message);
+    }
+    }
+
+
+    // ---------- FEEDBACK ----------
+    async function sendFeedback(kind){
+      // kind: 'accurate' | 'fair' | 'inaccurate'
+      // send the last prediction & user input to feedback endpoint
+      const symptoms = symptomInput.value.trim();
+      if(!symptoms) return alert('No symptoms to send feedback for');
+
+      // pick top predicted condition from UI
+      const topCond = resultList.querySelector('.result-item .left div > div')?.innerText
+      try {
+        await fetch('http://127.0.0.1:5000/api/feedback', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            symptoms: symptoms.split(',').map(s=>s.trim()).filter(Boolean),
+            predicted: topCond || '',
+            feedback: kind
+          })
+        });
+        alert('Thanks for your feedback!');
+      } catch(e){
+        alert('Feedback failed: ' + e.message);
+      }
+    }
+
+    // ---------- Mic / Speech recognition ----------
+    let recognition = null;
+    let recording = false;
+
+    function initSpeech(){
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+      if(!SpeechRecognition) {
+        micBtn.style.display = 'none';
+        return;
+      }
+
+      recognition = new SpeechRecognition();
+      recognition.lang = 'en-US';
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onstart = () => {
+        recording = true;
+        micBtn.classList.add('recording');
+        micBtn.setAttribute('aria-pressed','true');
+      };
+
+      recognition.onresult = (ev) => {
+        const text = ev.results[0][0].transcript;
+        symptomInput.value = text;
+      };
+
+      recognition.onend = () => {
+        recording = false;
+        micBtn.classList.remove('recording');
+        micBtn.setAttribute('aria-pressed','false');
+      };
+
+      recognition.onerror = (ev) => {
+        recording = false;
+        micBtn.classList.remove('recording');
+        micBtn.setAttribute('aria-pressed','false');
+        console.error('Speech error', ev);
+        alert('Speech recognition error or not supported in this browser.');
+      };
+    }
+
+    micBtn.addEventListener('click', () => {
+      if(!recognition) return;
+      if(recording){
+        recognition.stop();
+        return;
+      }
+      try { recognition.start(); } catch(e){ console.warn(e) }
+    });
+
+    // ---------- UI events ----------
+    sendBtn.addEventListener('click', (e) => {
+      e.preventDefault()
+      const text = symptomInput.value.trim();
+      if(!text) return alert('Please enter your symptoms.');
+
+      // parse by comma or space; produce array of trimmed tokens
+      const parts = text.split(',').map(s=>s.trim()).filter(Boolean);
+      doPredict(parts);
+    });
+
+    feedbackAccurate.addEventListener('click', ()=>sendFeedback('accurate'));
+    feedbackFair.addEventListener('click', ()=>sendFeedback('fair'));
+    feedbackInaccurate.addEventListener('click', ()=>sendFeedback('inaccurate'));
+
+    // ---------- INIT ----------
+    (function init(){
+      showEmpty();
+      fetchPredCount();
+      initSpeech();
+    })();
+
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+## admin.js
+
+/* admin.js
+   Frontend logic for Admin Dashboard (fetches real backend endpoints).
+   Expects the backend admin blueprint to be mounted under http://127.0.0.1:5000/api/admin/*,
+   as in your snippets (e.g. GET http://127.0.0.1:5000/api/admin/logs, 
+   GET http://127.0.0.1:5000/api/admin/models, POST http://127.0.0.1:5000/api/admin/upload-dataset).
+*/
+
+(() => {
+  const totalChecksEl = document.getElementById('totalChecks');
+  const successfulChecksEl = document.getElementById('successfulChecks');
+  const modelRetrainsEl = document.getElementById('modelRetrains');
+  const savedModelsEl = document.getElementById('savedModels');
+
+  const dragArea = document.getElementById('dragArea');
+  const fileInput = document.getElementById('fileInput');
+  const selectedFilesEl = document.getElementById('selectedFiles');
+
+  const syncDataBtn = document.getElementById('syncDataBtn');
+  // const saveModelBtn = document.getElementById('saveModelBtn');
+  const retrainBtn = document.getElementById('retrainBtn');
+
+  const syncStatus = document.getElementById('syncStatus');
+  const actionStatus = document.getElementById('actionStatus');
+
+  let selectedFiles = [];
+
+  /* ---------- UTIL ---------- */
+  function fmt(n) { return (n === null || n === undefined) ? '—' : String(n); }
+  function setStatus(msg, el = actionStatus) { el.textContent = msg; }
+
+  /* ---------- LOAD STATS ---------- */
+  async function loadStats() {
+    try {
+      const logsResp = await fetch('http://127.0.0.1:5000/api/admin/logs');
+      const logs = logsResp.ok ? await logsResp.json() : [];
+      const total = Array.isArray(logs) ? logs.length : 0;
+      const successful = Array.isArray(logs) ? logs.filter(l => l.predictions && l.predictions !== '[]').length : 0;
+
+      totalChecksEl.textContent = fmt(total);
+      successfulChecksEl.textContent = fmt(successful);
+
+      const modelsResp = await fetch('http://127.0.0.1:5000/api/admin/models');
+      const models = modelsResp.ok ? await modelsResp.json() : [];
+      savedModelsEl.textContent = fmt(Array.isArray(models) ? models.length : 0);
+      modelRetrainsEl.textContent = fmt(Array.isArray(models) ? models.length : 0);
+
+      const datasetsResp = await fetch('http://127.0.0.1:5000/api/admin/datasets');
+      const datasets = datasetsResp.ok ? await datasetsResp.json() : [];
+      renderDatasets(datasets);
+
+    } catch (err) {
+      console.error('loadStats error', err);
+      setStatus('Failed to load stats. Check backend.', syncStatus);
+      setStatus('Failed to load stats. Check backend.', actionStatus);
+    }
+  }
+
+  function renderDatasets(list) {
+    datasetsList.innerHTML = '';
+    if (!Array.isArray(list) || list.length === 0) {
+      datasetsList.innerHTML = '<div class="small" style="color:var(--muted)">No uploaded datasets</div>';
+      return;
+    }
+  }
+
+  /* ---------- FILE PICK / DRAG & DROP ---------- */
+  function updateSelectedFilesUI() {
+    if (!selectedFiles.length) {
+      selectedFilesEl.textContent = 'No files selected';
+      syncDataBtn.disabled = true;
+      return;
+    }
+    const names = selectedFiles.map(f => f.name).join(', ');
+    selectedFilesEl.textContent = names;
+    syncDataBtn.disabled = false;
+  }
+
+  dragArea.addEventListener('click', () => fileInput.click());
+  dragArea.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+
+  dragArea.addEventListener('dragover', (e) => { e.preventDefault(); dragArea.style.borderColor = 'rgba(25,138,230,0.3)'; });
+  dragArea.addEventListener('dragleave', (e) => { e.preventDefault(); dragArea.style.borderColor = 'rgba(25,138,230,0.12)'; });
+
+  dragArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dragArea.style.borderColor = 'rgba(25,138,230,0.12)';
+    const files = Array.from(e.dataTransfer.files || []).filter(f => f.name.toLowerCase().endsWith('.csv'));
+    if (files.length === 0) {
+      alert('Please drop CSV files only.');
+      return;
+    }
+    selectedFiles = files;
+    updateSelectedFilesUI();
+  });
+
+  fileInput.addEventListener('change', (e) => {
+    const files = Array.from(e.target.files || []).filter(f => f.name.toLowerCase().endsWith('.csv'));
+    selectedFiles = files;
+    updateSelectedFilesUI();
+  });
+
+  /* ---------- SYNC DATA (upload selected files) ---------- */
+  async function syncData() {
+    if (!selectedFiles.length) return alert('No files selected');
+
+    syncStatus.textContent = 'Uploading...';
+    syncDataBtn.disabled = true;
+
+    try {
+      for (let i = 0; i < selectedFiles.length; i++) {
+        const file = selectedFiles[i];
+        const form = new FormData();
+        form.append('file', file, file.name);
+
+        const resp = await fetch('http://127.0.0.1:5000/api/admin/upload-dataset', {
+          method: 'POST',
+          body: form
+        });
+
+        if (!resp.ok) {
+          const text = await resp.text();
+          throw new Error('Upload failed: ' + (text || resp.status));
+        }
+        setStatus('Data has been synced with the raw training dataset.', syncStatus);
+        setStatus('Sync complete. You may preprocess & retrain.', actionStatus);
+      }
+      
+      await loadStats();
+
+      selectedFiles = [];
+      fileInput.value = '';
+      updateSelectedFilesUI();
+    } catch (err) {
+      console.error('syncData error', err);
+      setStatus('Sync (Dataset upload) failed: ' + (err.message || ''), syncStatus);
+    } finally {
+      syncDataBtn.disabled = false;
+    }
+  }
+
+  // /* ---------- SAVE MODEL ---------- */
+  // async function saveModel() {
+  //   syncStatus.textContent = 'Saving Model...';
+  //   try {
+  //     const resp = await fetch('http://127.0.0.1:5000/api/admin/save-model', { method: 'POST' });
+  //     const data = await resp.json();
+
+  //     if (resp.ok) {
+  //       syncStatus.textContent = 'ML Model Saved Successfully';
+  //       await loadStats();   // <-- update the savedModels counter immediately
+  //     } else {
+  //       syncStatus.textContent = setStatus("Save model failed: " + (data.error || ""), actionStatus);
+  //     }
+
+  //   } catch(err) {
+  //     console.error('saveModel error', err);
+  //     syncStatus.textContent = setStatus("Save model failed: " + err.message, actionStatus);
+  //   }
+  // }
+
+
+  /* ---------- RETRAIN ---------- */
+  async function retrain() {
+    if (!confirm('This will retrain the ML model with the master dataset. Continue?')) return;
+    setStatus('Retraining started...');
+    try {
+      const resp = await fetch('http://127.0.0.1:5000/api/admin/retrain', { method: 'POST' });
+      const data = await resp.json();
+      if(resp.ok) setStatus("Retrain triggered. Check logs for progress.", actionStatus);
+      else setStatus("Retrain failed: " + (data.error || ""), actionStatus);
+    } catch(err) {
+      console.error('retrain error', err);
+      setStatus("Retrain failed: " + err.message, actionStatus);
+    }
+  }
+
+  /* ---------- EVENTS ---------- */
+  syncDataBtn.addEventListener('click', async (e) => {
+      e.preventDefault();       // prevent page reload
+      syncData();               // call your existing function
+  });
+
+  // saveModelBtn.addEventListener('click', async (e) => {
+  //     e.preventDefault();       // prevent page reload
+  //     saveModel();              // call your existing function
+  // });
+
+  retrainBtn.addEventListener('click', async (e) => {
+      e.preventDefault();       // prevent page reload
+      retrain();                // call your existing function
+  });
+
+
+  /* ---------- INITIALIZE ---------- */
+  loadStats();
+  setInterval(loadStats, 60 * 1000);
+
+  /* ----------- PROGRESS BAR ----------- */
+  function setProgress(value) {
+    const container = document.getElementById('progressContainer');
+    const bar = document.getElementById('progressBar');
+
+    container.style.display = "block";
+    bar.style.width = value + "%";
+  }
+
+  /* ----------- PREPROCESS RAW DATA ----------- */
+  async function preprocessData() {
+    if (!confirm("Preprocess ALL raw datasets into a single master dataset?")) return;
+
+    setProgress(10);
+    setStatus("Preprocessing raw data...");
+
+    try {
+      const resp = await fetch("http://127.0.0.1:5000/api/admin/preprocess", {
+        method: "POST",
+      });
+
+      const data = await resp.json();
+
+      if (resp.ok) {
+        setProgress(100);
+        setStatus("Preprocessing complete. Master dataset ready.");
+      } else {
+        setStatus("Preprocess failed: " + (data.error || ""));
+        setProgress(0);
+      }
+
+    } catch (err) {
+      console.error(err);
+      setStatus("Preprocess failed: " + err.message);
+      setProgress(0);
+    }
+  }
+
+  /* ----------- REVERT TO LAST MODEL ----------- */
+  async function revertModel() {
+    if (!confirm("This will restore the PREVIOUS model version.\n\nThis action cannot be undone.\nContinue?")) return;
+
+    setStatus("Reverting model...", syncStatus);
+
+    try {
+      const resp = await fetch("http://127.0.0.1:5000/api/admin/revert-model", {
+        method: "POST"
+      });
+
+      const data = await resp.json();
+
+      if (resp.ok) {
+        setStatus("Model reverted successfully.");
+        loadStats();
+      } else {
+        setStatus("Revert failed: " + (data.error || ""), syncStatus);
+      }
+
+    } catch (err) {
+      console.error(err);
+      setStatus("Revert failed: " + err.message, syncStatus);
+    }
+  }
+
+  /* ----------- DOWNLOAD CURRENT MODEL ----------- */
+  async function downloadModel() {
+    setStatus("Preparing model download...", syncStatus);
+
+    try {
+      const resp = await fetch("http://127.0.0.1:5000/api/admin/download-model");
+
+      if (!resp.ok) {
+        const msg = await resp.text();
+        setStatus("Download failed: " + msg, syncStatus);
+        return;
+      }
+
+      // actual file blob
+      const blob = await resp.blob();
+
+      // create temporary download link
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "current_model_bundle.zip";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      setStatus("Download complete.", syncStatus);
+    } catch (err) {
+      setStatus("Download failed: " + err.message, syncStatus);
+    }
+  }
+
+  /* ----------- BUTTON EVENTS ----------- */
+  document.getElementById("preprocessBtn")
+    .addEventListener("click", (e) => { e.preventDefault(); preprocessData(); });
+
+  document.getElementById("revertModelBtn")
+    .addEventListener("click", (e) => { e.preventDefault(); revertModel(); });
+
+  document.getElementById("downloadModelBtn")
+    .addEventListener("click", (e) => { e.preventDefault(); downloadModel(); });
+
+
+})();
+
+
+
+
+
+
+## evaluate.py
+
+import json
+import argparse
+import pandas as pd
+import joblib
+from sklearn.metrics import accuracy_score
+from preprocess.merger.vector_builder import VectorBuilder
+from preprocess.merger.feature_indexer import FeatureIndexer
+import numpy as np
+
+def top_k_accuracy(clf, X, y_true, k=3):
+    proba = clf.predict_proba(X)
+    topk = np.argsort(proba, axis=1)[:, ::-1][:, :k]
+    correct = 0
+    for i, row in enumerate(topk):
+        if y_true[i] in row:
+            correct += 1
+    return correct / len(y_true)
+
+def evaluate(master_csv, features_json, model_path):
+    df = pd.read_csv(master_csv)
+    features = FeatureIndexer.load(features_json)
+    vb = VectorBuilder(features)
+    X, y = vb.dataset_to_matrix(df)
+
+    # load model
+    obj = joblib.load(model_path)
+    clf = obj['model']
+    le = obj['label_encoder']
+    y_enc = le.transform(y)
+
+    acc = accuracy_score(y_enc, clf.predict(X))
+    top3 = top_k_accuracy(clf, X, y_enc, k=3)
+
+    res = {'accuracy': float(acc), 'top3_accuracy': float(top3)}
+    print(json.dumps(res, indent=2))
+    with open(model_path + '.eval.json', 'w', encoding='utf-8') as f:
+        json.dump(res, f, ensure_ascii=False, indent=2)
+
+if __name__ == '__main__':
+    p = argparse.ArgumentParser()
+    p.add_argument('--master_csv', default='ml/data/processed/master_dataset.csv')
+    p.add_argument('--features_json', default='ml/data/processed/features.json')
+    p.add_argument('--model', default='ml/model/rf_model.joblib')
+    args = p.parse_args()
+    evaluate(args.master_csv, args.features_json, args.model)
+
+
+
+
+
+## run_preprocess.py
+
+"""
+High-level preprocessing entrypoint.
+Runs: auto-loading → cleaning → merging → feature mapping → master dataset creation.
+"""
+
+import json
+from pathlib import Path
+from preprocess.pipeline import main as run_pipeline
+
+RAW_DIR = "ml/data/raw"
+OUT_DIR = "ml/data/processed"
+SYNONYMS = "ml/preprocess/cleaners/synonyms_map.json"
+
+if __name__ == "__main__":
+    print("\n=== AI Health Assistant — PREPROCESSING PIPELINE ===")
+    print("Scanning raw datasets at:", RAW_DIR)
+    
+    Path(OUT_DIR).mkdir(parents=True, exist_ok=True)
+
+    run_pipeline(
+        raw_dir=RAW_DIR,
+        out_dir=OUT_DIR,
+        synonyms_path=SYNONYMS
+    )
+
+    print("\nPreprocessing complete.")
+    print("Master dataset saved at:", f"{OUT_DIR}/master_dataset.csv")
+    print("Feature index saved at:", f"{OUT_DIR}/features.json")
+
+
+
+
+
+## run_train_eval.py
+
+"""
+High-level training + evaluation entrypoint.
+Loads processed dataset → trains RandomForest → evaluates top-1 and top-3 accuracy.
+"""
+
+import os
+from train import train
+from evaluate import evaluate
+
+MASTER = "ml/data/processed/master_dataset.csv"
+FEATURES = "ml/data/processed/features.json"
+MODEL = "ml/model/rf_model.joblib"
+
+if __name__ == "__main__":
+    print("\n=== AI Health Assistant — TRAINING & EVALUATION ===")
+
+    if not os.path.exists(MASTER):
+        print("\n❌ ERROR: No processed dataset found!")
+        print("Run: python ml/run_preprocess.py first.")
+        exit()
+
+    print("\nTraining model...")
+    train(
+        master_csv=MASTER,
+        features_json=FEATURES,
+        out_model=MODEL
+    )
+
+    print("\nEvaluating model...")
+    evaluate(
+        master_csv=MASTER,
+        features_json=FEATURES,
+        model_path=MODEL
+    )
+
+    print("\nTraining + Evaluation complete!")
+    print("Model saved:", MODEL)
+    print("Metadata:", MODEL + ".meta.json")
+    print("Evaluation:", MODEL + ".eval.json")
+
+
+
+
+
+
+
+## train.py
+
+"""Train RandomForest with the processed master dataset."""
+import joblib
+import json
+import argparse
+import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.preprocessing import LabelEncoder
+from preprocess.merger.vector_builder import VectorBuilder
+from preprocess.merger.feature_indexer import FeatureIndexer
+
+def train(master_csv, features_json, out_model):
+    df = pd.read_csv(master_csv)
+    features = FeatureIndexer.load(features_json)
+    vb = VectorBuilder(features)
+    X, y = vb.dataset_to_matrix(df)
+    le = LabelEncoder()
+    y_enc = le.fit_transform(y)
+
+    clf = RandomForestClassifier(n_estimators=200, max_depth=20, random_state=42)
+    clf.fit(X, y_enc)
+
+    # save model, label encoder & metadata
+    joblib.dump({'model': clf, 'label_encoder': le}, out_model)
+    metadata = {
+        'n_classes': int(len(le.classes_)),
+        'classes': list(le.classes_)
+    }
+    with open(out_model + '.meta.json', 'w', encoding='utf-8') as f:
+        json.dump(metadata, f, ensure_ascii=False, indent=2)
+    print('Saved model to', out_model)
+
+if __name__ == '__main__':
+    p = argparse.ArgumentParser()
+    p.add_argument('--master_csv', default='ml/data/processed/master_dataset.csv')
+    p.add_argument('--features_json', default='ml/data/processed/features.json')
+    p.add_argument('--out', default='ml/model/rf_model.joblib')
+    args = p.parse_args()
+    train(args.master_csv, args.features_json, args.out)
+
+
+
+
+
+
+

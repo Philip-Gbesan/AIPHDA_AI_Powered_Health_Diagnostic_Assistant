@@ -1,0 +1,5 @@
+{
+  "fever": ["pyrexia", "high temperature", "temperature high"],
+  "cough": ["dry cough", "wet cough", "coughing"],
+  "headache": ["head pain", "migraine"]
+}
